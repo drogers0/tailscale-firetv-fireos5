@@ -1,0 +1,28 @@
+# Build scratch
+.build/
+dist/
+
+# Artifacts — published as GitHub Releases, never committed.
+# Pinned URLs + sha256 reproduce them; binaries would bloat history.
+*.apk
+*.aar
+*.aab
+*.apk.sha256
+
+# Raw device dumps: these contain ro.serialno, Wi-Fi essid/bssid, and Amazon
+# account tokens. Only scrubbed copies under docs/ may be committed.
+*-before.txt
+backup/raw/
+
+# Secrets
+*.env
+*.jks
+*.keystore
+local.properties
+
+# Tooling
+.gradle/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
