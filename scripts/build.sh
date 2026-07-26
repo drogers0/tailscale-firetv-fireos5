@@ -2,26 +2,36 @@
 #
 # Build Tailscale for Fire OS 5 / Android 5.1 (API 22) on OpenGL ES 2.0 hardware.
 #
-# Pinned to the last upstream commit where the Compose UI and minSdkVersion 22 coexist.
-# See FINDINGS.md for why that specific commit, and BUILD.md for prerequisites.
+# Upstream declares minSdkVersion 26 from 2024-03-13 onward, but that bump was a one-line
+# decision, not a dependency change (see FINDINGS.md). This script checks out a chosen
+# upstream ref and overrides the API floor in both places it is enforced:
+#
+#   1. android/build.gradle   -> minSdkVersion
+#   2. gomobile bind          -> -androidapi   (the native AAR has its own gate)
+#
+# Overriding only the first produces an APK that installs and then dies in native code.
+#
+# See BUILD.md for prerequisites and TS_REF choices.
 
 set -euo pipefail
 
 # ---- pinned inputs ----------------------------------------------------------
 TS_REPO="https://github.com/tailscale/tailscale-android.git"
-TS_COMMIT="3926cf4b5611d444dae7efc50499f477371e7327"   # 2024-03-13, last Compose + minSdk 22
-NDK_VERSION="23.1.7779620"                              # required by upstream build.gradle
-SDK_PLATFORM="platforms;android-34"                     # compileSdkVersion 34
-SDK_BUILD_TOOLS="build-tools;34.0.0"
+# 1.64.0 — earliest release with a complete Compose UI (settings, exit-node picker).
+# The earlier 3926cf4b56 renders but its screens are stubs; see FINDINGS.md.
+TS_REF="${TS_REF:-1.64.0-t78dc8622d-gfd2ca6fa940}"
+NDK_VERSION="${NDK_VERSION:-23.1.7779620}"
 
 # ---- tunables ---------------------------------------------------------------
-TS_ARCH="${TS_ARCH:-arm}"          # arm = armeabi-v7a only; the big time saver
+MIN_SDK="${MIN_SDK:-22}"           # device API level
+TS_ARCH="${TS_ARCH:-arm}"          # gogio recipe only; armeabi-v7a
+GOMOBILE_TARGET="${GOMOBILE_TARGET:-android/arm}"
 WORKDIR="${WORKDIR:-.build}"
 SKIP_TESTS="${SKIP_TESTS:-1}"
 GRADLE_HEAP="${GRADLE_HEAP:-6g}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="$REPO_ROOT/$WORKDIR/tailscale-android"
+SRC="$REPO_ROOT/$WORKDIR/tailscale-android-${TS_REF##*-}"
 DIST="$REPO_ROOT/dist"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -30,28 +40,25 @@ warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ---- 1. preflight -----------------------------------------------------------
-info "Preflight"
+info "Preflight  (ref=$TS_REF  minSdk=$MIN_SDK)"
 
-command -v git   >/dev/null || die "git not found"
-command -v curl  >/dev/null || die "curl not found"
-command -v go    >/dev/null || die "go not found (needed to bootstrap Tailscale's pinned toolchain)"
+for c in git curl go; do command -v $c >/dev/null || die "$c not found"; done
 
-# JDK 17. AGP 8.1.4 targets 17; 21 fails late and opaquely, so refuse up front.
 if [ -z "${JAVA_HOME:-}" ]; then
   if [ "$(uname)" = "Darwin" ] && /usr/libexec/java_home -v 17 >/dev/null 2>&1; then
     JAVA_HOME="$(/usr/libexec/java_home -v 17)"
+  elif [ -d "$HOME/.local/jdks" ]; then
+    JAVA_HOME="$(ls -d "$HOME"/.local/jdks/jdk-17*/Contents/Home "$HOME"/.local/jdks/jdk-17* 2>/dev/null | head -1)"
   elif [ -d /usr/lib/jvm/java-17-openjdk-amd64 ]; then
     JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
   fi
 fi
-[ -n "${JAVA_HOME:-}" ] || die "JDK 17 not found. Install it and/or set JAVA_HOME. See BUILD.md."
+[ -n "${JAVA_HOME:-}" ] || die "JDK 17 not found. Set JAVA_HOME. See BUILD.md."
 export JAVA_HOME
-
 JAVA_MAJOR="$("$JAVA_HOME/bin/java" -version 2>&1 | head -1 | sed -E 's/.*"([0-9]+).*/\1/')"
-[ "$JAVA_MAJOR" = "17" ] || die "JAVA_HOME points at JDK $JAVA_MAJOR; AGP 8.1.4 needs JDK 17. See BUILD.md."
+[ "$JAVA_MAJOR" = "17" ] || die "JAVA_HOME is JDK $JAVA_MAJOR; AGP needs JDK 17. See BUILD.md."
 info "JDK 17: $JAVA_HOME"
 
-# Android SDK
 if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
   if [ "$(uname)" = "Darwin" ]; then ANDROID_SDK_ROOT="$HOME/Library/Android/sdk"
   else ANDROID_SDK_ROOT="$HOME/Android/Sdk"; fi
@@ -60,11 +67,7 @@ export ANDROID_SDK_ROOT ANDROID_HOME="$ANDROID_SDK_ROOT"
 mkdir -p "$ANDROID_SDK_ROOT"
 info "Android SDK: $ANDROID_SDK_ROOT"
 
-# Disk (need ~5 GB)
-avail_kb="$(df -Pk "$ANDROID_SDK_ROOT" | tail -1 | awk '{print $4}')"
-[ "$avail_kb" -gt 5242880 ] || warn "less than 5 GB free at $ANDROID_SDK_ROOT — build may fail"
-
-# ---- 2. Android SDK packages ------------------------------------------------
+# ---- 2. SDK packages --------------------------------------------------------
 SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
 if [ ! -x "$SDKMANAGER" ]; then
   info "Installing Android command-line tools"
@@ -82,108 +85,144 @@ if [ ! -x "$SDKMANAGER" ]; then
   rm -rf "$tmp"
 fi
 
-need_pkg() { [ ! -d "$ANDROID_SDK_ROOT/$1" ]; }
 MISSING=()
-need_pkg "ndk/$NDK_VERSION"     && MISSING+=("ndk;$NDK_VERSION")
-need_pkg "platforms/android-34" && MISSING+=("$SDK_PLATFORM")
-need_pkg "build-tools/34.0.0"   && MISSING+=("$SDK_BUILD_TOOLS")
-
+[ -d "$ANDROID_SDK_ROOT/ndk/$NDK_VERSION" ]  || MISSING+=("ndk;$NDK_VERSION")
+[ -d "$ANDROID_SDK_ROOT/platforms/android-34" ] || MISSING+=("platforms;android-34")
+[ -d "$ANDROID_SDK_ROOT/build-tools/34.0.0" ]   || MISSING+=("build-tools;34.0.0")
 if [ ${#MISSING[@]} -gt 0 ]; then
-  info "Installing SDK packages: ${MISSING[*]}  (NDK is ~1 GB)"
+  info "Installing SDK packages: ${MISSING[*]}"
   yes 2>/dev/null | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
   "$SDKMANAGER" "${MISSING[@]}"
 else
-  info "SDK packages already present"
+  info "SDK packages present"
 fi
+export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
 
-# ---- 3. source checkout -----------------------------------------------------
+# ---- 3. checkout ------------------------------------------------------------
 if [ ! -d "$SRC/.git" ]; then
-  info "Fetching upstream commit ${TS_COMMIT:0:12} (shallow)"
+  info "Fetching $TS_REF (shallow)"
   mkdir -p "$SRC"
   git -C "$SRC" init -q
   git -C "$SRC" remote add origin "$TS_REPO" 2>/dev/null || true
-  git -C "$SRC" fetch -q --depth 1 origin "$TS_COMMIT"
+  git -C "$SRC" fetch -q --depth 1 origin "$TS_REF"
   git -C "$SRC" checkout -q FETCH_HEAD
 else
   info "Reusing checkout at $SRC"
-  git -C "$SRC" checkout -q "$TS_COMMIT" 2>/dev/null || true
 fi
+info "HEAD: $(git -C "$SRC" rev-parse HEAD)"
 
-actual="$(git -C "$SRC" rev-parse HEAD)"
-[ "$actual" = "$TS_COMMIT" ] || die "checkout is at $actual, expected $TS_COMMIT"
+# Discard any patches from a previous run so overrides apply to pristine sources.
+git -C "$SRC" checkout -q -- android/build.gradle Makefile 2>/dev/null || true
 
-# ---- 4. Tailscale's pinned Go toolchain -------------------------------------
-# The tailscale_go build tag needs their fork; stock Go will not do. Mirrors upstream's
-# Makefile, which resolves the version through tailscale.com/cmd/printdep.
-info "Resolving Tailscale Go toolchain"
-GO_VER="$(cd "$SRC" && go run tailscale.com/cmd/printdep --go)"
-TOOLCHAINDIR="${TOOLCHAINDIR:-$HOME/.cache/tailscale-android-go-$GO_VER}"
-if [ ! -x "$TOOLCHAINDIR/bin/go" ]; then
-  info "Downloading Go $GO_VER toolchain"
-  GO_URL="$(cd "$SRC" && go run tailscale.com/cmd/printdep --go-url)"
-  mkdir -p "$TOOLCHAINDIR"
-  curl -fsSL "$GO_URL" | tar --strip-components=1 -C "$TOOLCHAINDIR" -zx
+# ---- 4. Go toolchain --------------------------------------------------------
+if [ -x "$SRC/tool/go" ]; then
+  GO="$SRC/tool/go"                      # upstream wrapper; fetches its own pinned Go
+  info "Using upstream tool/go"
 else
-  info "Go $GO_VER toolchain cached"
+  GO="go"
+  info "Using system go: $(go version)"
 fi
-export PATH="$TOOLCHAINDIR/bin:$PATH"
-export GOROOT=
-info "go: $(go version)"
 
-# ---- 5. build ipn.aar (the Go/cgo layer) ------------------------------------
-VERSIONNAME="$(grep -m1 versionName "$SRC/android/build.gradle" 2>/dev/null | sed -E 's/.*"(.*)".*/\1/' || true)"
-[ -n "$VERSIONNAME" ] || VERSIONNAME="$(grep -m1 versionName "$SRC/android_legacy/build.gradle" | sed -E 's/.*"(.*)".*/\1/')"
-VERSIONNAME_SHORT="${VERSIONNAME%%-*}"
-info "Version: $VERSIONNAME"
+# gomobile shells out to a bare `go`, so the pinned toolchain must win on PATH.
+# Otherwise a modern system Go compiles the ref's pinned x/tools and fails with
+#   tokeninternal.go: invalid array length -delta * delta
+# which looks like a source bug but is really a toolchain mismatch.
+GOROOT_PINNED="$( cd "$SRC" && "$GO" env GOROOT 2>/dev/null || true )"
+if [ -n "$GOROOT_PINNED" ] && [ -x "$GOROOT_PINNED/bin/go" ]; then
+  export PATH="$GOROOT_PINNED/bin:$PATH"
+  info "Pinned Go on PATH: $("$GOROOT_PINNED/bin/go" version)"
+else
+  warn "could not resolve a pinned GOROOT; gomobile will use whatever go is on PATH"
+fi
 
-info "Building ipn.aar for arch='$TS_ARCH' (upstream default is all four ABIs)"
+# ---- 5. apply the API-floor overrides ---------------------------------------
+BG="$SRC/android/build.gradle"
+CUR_MIN="$(grep -oE 'minSdkVersion +[0-9]+' "$BG" | head -1 | grep -oE '[0-9]+')"
+if [ "$CUR_MIN" != "$MIN_SDK" ]; then
+  info "Overriding minSdkVersion $CUR_MIN -> $MIN_SDK"
+  sed -i.bak -E "s/minSdkVersion +[0-9]+/minSdkVersion $MIN_SDK/" "$BG" && rm -f "$BG.bak"
+fi
+
+# getLocalProperty() reads local.properties; absent keys break configuration.
+[ -f "$SRC/android/local.properties" ] || cat > "$SRC/android/local.properties" <<EOF
+sdk.dir=$ANDROID_SDK_ROOT
+githubUsername=
+githubPassword=
+github2FASecret=
+EOF
+
+# ---- 6. native library ------------------------------------------------------
 mkdir -p "$SRC/android/libs"
-ARCH_FLAG=(); [ -n "$TS_ARCH" ] && ARCH_FLAG=(-arch "$TS_ARCH")
-( cd "$SRC" && go run gioui.org/cmd/gogio \
-    -ldflags "-X tailscale.com/version.longStamp=$VERSIONNAME -X tailscale.com/version.shortStamp=$VERSIONNAME_SHORT" \
-    -buildmode archive \
-    -target android \
-    "${ARCH_FLAG[@]}" \
-    -appid com.tailscale.ipn \
-    -tags novulkan,tailscale_go \
-    -o android/libs/ipn.aar \
-    github.com/tailscale/tailscale-android/cmd/tailscale )
+if [ -d "$SRC/libtailscale" ]; then
+  # Modern recipe: gomobile bind. The -androidapi flag is a second, independent
+  # API gate — leaving it at 26 yields an APK that installs then dies natively.
+  info "Native: gomobile bind (androidapi=$MIN_SDK, target=$GOMOBILE_TARGET)"
+  export GOBIN="$SRC/.gobin"; mkdir -p "$GOBIN"
+  export PATH="$GOBIN:$PATH"
+  ( cd "$SRC" && "$GO" install golang.org/x/mobile/cmd/gobind golang.org/x/mobile/cmd/gomobile )
 
-[ -f "$SRC/android/libs/ipn.aar" ] || die "ipn.aar was not produced"
-info "ipn.aar: $(du -h "$SRC/android/libs/ipn.aar" | cut -f1)"
+  LDFLAGS=""
+  if [ -x "$SRC/version-ldflags.sh" ]; then LDFLAGS="$("$SRC/version-ldflags.sh" 2>/dev/null || true)"; fi
+  TAGS=""
+  if [ -x "$SRC/build-tags.sh" ]; then TAGS="$("$SRC/build-tags.sh" 2>/dev/null || true)"; fi
 
-# ---- 6. assemble the APK ----------------------------------------------------
-# Upstream ships -Xmx2g, which invites GC thrash on Compose.
-GP="$SRC/android/gradle.properties"
-if ! grep -q "^org.gradle.parallel" "$GP" 2>/dev/null; then
-  {
-    echo "org.gradle.parallel=true"
-    echo "org.gradle.caching=true"
-    echo "kotlin.incremental=true"
-  } >> "$GP"
+  GOMOBILE_ARGS=(bind -target "$GOMOBILE_TARGET" -androidapi "$MIN_SDK")
+  [ -n "$TAGS" ]    && GOMOBILE_ARGS+=(-tags "$TAGS")
+  [ -n "$LDFLAGS" ] && GOMOBILE_ARGS+=(-ldflags "-w $LDFLAGS")
+  GOMOBILE_ARGS+=(-o android/libs/libtailscale.aar ./libtailscale)
+
+  ( cd "$SRC" && gomobile "${GOMOBILE_ARGS[@]}" )
+  [ -f "$SRC/android/libs/libtailscale.aar" ] || die "libtailscale.aar was not produced"
+  info "libtailscale.aar: $(du -h "$SRC/android/libs/libtailscale.aar" | cut -f1)"
+else
+  # Legacy recipe: gogio archive.
+  info "Native: gogio (arch=$TS_ARCH)"
+  VN="$(grep -m1 versionName "$BG" 2>/dev/null | sed -E 's/.*"(.*)".*/\1/' || true)"
+  ARCH_FLAG=(); [ -n "$TS_ARCH" ] && ARCH_FLAG=(-arch "$TS_ARCH")
+  ( cd "$SRC" && "$GO" run gioui.org/cmd/gogio \
+      -ldflags "-X tailscale.com/version.longStamp=$VN -X tailscale.com/version.shortStamp=${VN%%-*}" \
+      -buildmode archive -target android "${ARCH_FLAG[@]}" \
+      -appid com.tailscale.ipn -tags novulkan,tailscale_go \
+      -o android/libs/ipn.aar github.com/tailscale/tailscale-android/cmd/tailscale )
+  [ -f "$SRC/android/libs/ipn.aar" ] || die "ipn.aar was not produced"
 fi
-sed -i.bak -E "s/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx${GRADLE_HEAP} -XX:MaxMetaspaceSize=1g/" "$GP" && rm -f "$GP.bak"
 
-GRADLE_TASKS=(assembleFdroidDebug)
-[ "$SKIP_TESTS" = "1" ] || GRADLE_TASKS=(test assembleFdroidDebug)
+# ---- 7. gradle --------------------------------------------------------------
+GP="$SRC/android/gradle.properties"
+grep -q "^org.gradle.parallel" "$GP" 2>/dev/null || printf 'org.gradle.parallel=true\norg.gradle.caching=true\nkotlin.incremental=true\n' >> "$GP"
+if grep -q "^org.gradle.jvmargs" "$GP" 2>/dev/null; then
+  sed -i.bak -E "s/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx${GRADLE_HEAP} -XX:MaxMetaspaceSize=1g/" "$GP" && rm -f "$GP.bak"
+else
+  echo "org.gradle.jvmargs=-Xmx${GRADLE_HEAP} -XX:MaxMetaspaceSize=1g" >> "$GP"
+fi
 
-info "Gradle: ${GRADLE_TASKS[*]}"
-( cd "$SRC/android" && ./gradlew --no-daemon "${GRADLE_TASKS[@]}" )
+# Flavors were removed once Tailscale dropped Play Services; pick whichever exists.
+if grep -qi "fdroid" "$BG"; then
+  ASSEMBLE=assembleFdroidDebug
+  APK_GLOB="$SRC/android/build/outputs/apk/fdroid/debug/*.apk"
+else
+  ASSEMBLE=assembleDebug
+  APK_GLOB="$SRC/android/build/outputs/apk/debug/*.apk"
+fi
+TASKS=("$ASSEMBLE"); [ "$SKIP_TESTS" = "1" ] || TASKS=(test "$ASSEMBLE")
 
-APK="$SRC/android/build/outputs/apk/fdroid/debug/android-fdroid-debug.apk"
-[ -f "$APK" ] || die "expected APK not found at $APK"
+info "Gradle: ${TASKS[*]}"
+( cd "$SRC/android" && ./gradlew --no-daemon "${TASKS[@]}" )
 
-# ---- 7. verify + publish ----------------------------------------------------
+APK="$(ls -1 $APK_GLOB 2>/dev/null | head -1)"
+[ -n "$APK" ] && [ -f "$APK" ] || die "no APK produced under $APK_GLOB"
+
+# ---- 8. verify + publish ----------------------------------------------------
 mkdir -p "$DIST"
-OUT="$DIST/tailscale-fireos5-${VERSIONNAME}-armeabi-v7a.apk"
+VER="$(cd "$SRC" && git describe --tags --always 2>/dev/null || echo "$TS_REF")"
+OUT="$DIST/tailscale-fireos5-${TS_REF%%-*}-minsdk${MIN_SDK}-armeabi-v7a.apk"
 cp "$APK" "$OUT"
 
-info "Verifying against device constraints (API 22 / armeabi-v7a)"
-if ! python3 "$REPO_ROOT/scripts/verify-apk.py" --require-min-sdk 22 --require-abi armeabi-v7a "$OUT"; then
+info "Verifying (minSdk <= $MIN_SDK, armeabi-v7a present)"
+if ! python3 "$REPO_ROOT/scripts/verify-apk.py" --require-min-sdk "$MIN_SDK" --require-abi armeabi-v7a "$OUT"; then
   rm -f "$OUT"
-  die "verification failed — artifact rejected, not written to dist/"
+  die "verification failed — artifact rejected"
 fi
-
 ( cd "$DIST" && shasum -a 256 "$(basename "$OUT")" > "$(basename "$OUT").sha256" )
 
 echo
@@ -191,13 +230,13 @@ bold "Built: $OUT"
 bold "sha256: $(cut -d' ' -f1 < "$OUT.sha256")"
 cat <<EOF
 
-Next:
-  adb connect <fire-stick-ip>:5555
-  ./scripts/device-check.sh <fire-stick-ip>:5555
-  adb install -r "$OUT"
-
-Then watch the launch — the failure this build targets is immediate:
+Install and test:
+  adb uninstall com.tailscale.ipn        # debug key differs from any prior install
+  adb install "$OUT"
   adb logcat -c
-  adb shell monkey -p com.tailscale.ipn -c android.intent.category.LAUNCHER 1
-  adb logcat | grep -iE "tailscale|gio|opengl|egl|glerror|fatal"
+  adb shell am start -n com.tailscale.ipn/.MainActivity
+  adb logcat | grep -iE "tailscale|gio|opengl|egl|glerror|fatal|NoSuchMethod|VerifyError"
+
+With an overridden API floor, watch for NoSuchMethodError / NoClassDefFoundError /
+VerifyError — those mean the code calls an API newer than $MIN_SDK.
 EOF

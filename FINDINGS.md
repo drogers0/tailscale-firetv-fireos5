@@ -111,11 +111,31 @@ setContent { AppTheme { ... } }
 
 Compose renders through Android's standard hardware canvas — **no GLES 3 requirement.**
 
-The module is complete, not a UI shell. It carries the full VPN plumbing —
-`IPNService.java`, `App.java`, `StartVPNWorker`, `QuickToggleService`, `MDMSettings.kt` —
-and all four screens, including `ExitNodePicker.kt` and `SettingsView.kt`. (The next
-commit is titled "Add settings screen", but `SettingsView.kt` already exists here; that
-commit refines it.)
+The module carries the full VPN plumbing — `IPNService.java`, `App.java`,
+`StartVPNWorker`, `QuickToggleService`, `MDMSettings.kt`.
+
+> ### ⚠️ Corrected 2026-07-26 — this commit's UI is a set of stubs
+>
+> An earlier revision of this document claimed the screens were complete because
+> `SettingsView.kt` and `ExitNodePicker.kt` exist at this commit. **That inference was
+> wrong.** The files exist; the screens do not. Confirmed on device (RC1) and in source:
+>
+> ```kotlin
+> @Composable
+> fun Settings(viewModel: SettingsViewModel) {
+>     Column { Text(text = "Future Home of Settings") }
+> }
+> ```
+>
+> On hardware, RC1 renders correctly and then does nothing: Connect is inert and Settings
+> shows "Future Home of Settings". `MainViewModel.toggleVpn()` and `IpnManager.startVPN()`
+> are wired to the buttons, but the surrounding flow (VPN consent, LocalAPI) was still
+> under construction.
+>
+> The next commit being titled *"Add settings screen"* was the clue, and it was explained
+> away rather than checked. **Presence of a file is not evidence of a working screen.**
+>
+> What this commit *does* prove is the graphics claim — see §9.
 
 The manifest declares `LEANBACK_LAUNCHER`, so it is TV-aware.
 
@@ -180,6 +200,72 @@ Crucially, that window was never released:
 > **Gap in this search:** xdaforums.com returned HTTP 403, so the main Fire TV + Tailscale
 > thread could not be read, and forum content indexes poorly. This is *no evidence found*,
 > not proof of absence.
+
+## 9. On-device result: the GPU problem is solved
+
+RC1 (built from `3926cf4b56`) was installed on the AFTT and launched.
+
+```
+I/ActivityManager: Displayed com.tailscale.ipn/.MainActivity: +4s662ms
+performance:FirstFramesTotal ... Counter=1
+```
+
+A screenshot confirms a fully drawn Compose UI — "Please Login" header, settings gear, a
+*Not Connected / Connect to your tailnet* card. Correct colors, fonts and 1920x1080 layout.
+
+- **No** `no support for OpenGL ES 3 nor EXT_sRGB`
+- **No** `FATAL EXCEPTION`, no `glGetError`
+- Only `libgio.so` mentions are benign linker warnings (`unused DT entry`)
+- Launch is slow: 4.7 s to first frame, 5.2 s total, 16 dropped frames
+
+**Compose renders on a Mali-450 / OpenGL ES 2.0 GPU.** The blocker that defeats every
+downloadable option is real, and it is beaten. What RC1 lacks is a finished app around it.
+
+## 10. The API floor is enforced in two places
+
+Correcting a second wrong assumption: patching `minSdkVersion` in `android/build.gradle` is
+**not sufficient** on 1.64.0+. The native library has its own independent gate:
+
+```make
+gomobile bind -target android -androidapi 26 \
+    -o android/libs/libtailscale.aar ./libtailscale
+```
+
+Override only the Gradle value and you get an APK that installs and then dies in native
+code. `scripts/build.sh` patches both.
+
+Also note the native recipe changed: `gogio` built the legacy Gio app, while the Compose
+app is built by `gomobile bind` against `./libtailscale`. By 1.78.0 `gogio` is gone.
+
+### Why overriding the floor is plausible
+
+The bump commit `bf0e56469f` touched 19 files, and its **entire** `build.gradle` change was:
+
+```diff
+-        minSdkVersion 22
++        minSdkVersion 26
+```
+
+No dependency was added or upgraded alongside it. The floor was a judgment call, not a
+forced consequence — so restoring 22 on a later, finished release is worth testing. The
+risk moves from compile-time to runtime: `NoSuchMethodError` / `VerifyError` if the code
+calls an API newer than 22.
+
+### Version selection
+
+| Tag | Settings screen | Native build | Flavors | play-services |
+|---|---|---|---|---|
+| `3926cf4b56` | **stub** | gogio | fdroid/play | 0 |
+| 1.64.0 | real | gomobile | none | 0 |
+| 1.68.0 | real | gomobile | none | 0 |
+| 1.76.2 | real | gomobile | none | 0 |
+| 1.78.0 | real | gomobile | none | 0 |
+
+`play-services` is 0 everywhere — Tailscale dropped Play Services, which is why the
+fdroid/play split disappeared. Good news for Fire OS, which has no Play Services.
+
+**1.64.0 is the chosen target**: earliest release with a complete UI, therefore the least
+accumulated reliance on API 26+.
 
 ## 8. Verification method
 

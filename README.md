@@ -32,21 +32,34 @@ The usual advice is that this gap is unbridgeable. It isn't, quite.
 
 ## The fix
 
-Upstream commit [`3926cf4b56`](https://github.com/tailscale/tailscale-android/commit/3926cf4b5611d444dae7efc50499f477371e7327)
-(2024-03-13) is the **last commit where the Compose rewrite and `minSdkVersion 22` coexist.**
-The very next commit raised the floor to 26. Tailscale never shipped a release from that
-window, so this combination has never existed as a downloadable APK.
+The GLES 3 requirement came from **Gio**, not from Tailscale. Once the UI moved to Jetpack
+Compose it renders through Android's standard hardware canvas, which is perfectly happy on
+GLES 2.0. **This is confirmed on real hardware** — see [Status](#status).
 
-This repo builds it.
+The Android-8 floor turns out to be separable from that fix. The commit that raised it
+([`bf0e56469f`](https://github.com/tailscale/tailscale-android/commit/bf0e56469f))
+touched 19 files, and its entire `build.gradle` change was one line:
 
-- **Compose UI** → renders through Android's standard hardware canvas, no GLES 3 required
-- **minSdk 22** → installs on Android 5.1
-- **fdroid flavor** → no Google Play Services, which Fire OS lacks
-- **armeabi-v7a only** → the single ABI these devices use
+```diff
+-        minSdkVersion 22
++        minSdkVersion 26
+```
 
-Upstream Go module pinned at `tailscale.com v1.61.0-pre.0.20240311120500-7429e8912acb`,
-so the client is roughly **v1.61/1.62 era** — about two years newer than the last APK that
-will otherwise start on this hardware.
+No dependency was added or upgraded with it. So this repo checks out a **finished** release
+and restores the old floor, in both places it is enforced:
+
+| | |
+|---|---|
+| `android/build.gradle` | `minSdkVersion` → 22 |
+| `gomobile bind` | `-androidapi` → 22 |
+
+Overriding only the first yields an APK that installs and then dies in native code.
+
+Default target is **1.64.0** — the earliest release with a complete Compose UI (working
+settings screen and exit-node picker), and therefore the least accumulated reliance on
+API 26+. Built `armeabi-v7a`-only, the single ABI these devices use. Tailscale dropped
+Google Play Services before this release, so nothing here depends on services Fire OS
+lacks.
 
 ## Verified target device
 
@@ -82,18 +95,28 @@ hardware — use the [official Tailscale client](https://tailscale.com/docs/inst
 
 ## Status
 
+Tested on a Fire TV Stick 2nd gen (AFTT), Fire OS 5.2.9.5:
+
 | | |
 |---|---|
-| Builds reproducibly | see [BUILD.md](BUILD.md) |
 | Installs on API 22 | ✅ verified |
-| Reaches control plane | ✅ verified (even the 2020 client does) |
-| UI renders on GLES 2.0 | ⏳ **the open question this repo exists to answer** |
-| Login / exit node selection | ⏳ untested |
+| Reaches control plane | ✅ verified (even a 2020 client does) |
+| **UI renders on GLES 2.0** | ✅ **verified — the core claim** |
+| Login / VPN / exit node | ⏳ under test |
 
-The Compose module was an unshipped, in-flight rewrite when this commit was cut, and
-Tailscale raised minSdk to 26 immediately afterward — possibly because they hit a runtime
-problem at API 22. That risk is real and unproven either way. Releases here are published
-as **release candidates** until confirmed on hardware.
+`Displayed com.tailscale.ipn/.MainActivity: +4s662ms`, first frame drawn, no GLES fatal,
+screenshot shows a fully rendered Compose UI. The graphics blocker that defeats every
+downloadable option is beaten.
+
+> ### RC1 is known-broken — do not use it
+>
+> [`1.59.53-fireos5-rc1`](../../releases/tag/1.59.53-fireos5-rc1) was built from
+> `3926cf4b56`, an in-flight snapshot whose screens are stubs. It renders, then does
+> nothing: Connect is inert and Settings displays "Future Home of Settings". Kept only as
+> evidence for the graphics finding. Use a later release.
+
+Everything ships as a **release candidate** until login and exit-node selection are
+confirmed on hardware. Launch is slow on this class of device — ~4.7 s to first frame.
 
 ## Quick start
 

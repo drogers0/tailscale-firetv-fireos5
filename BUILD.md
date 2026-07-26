@@ -1,10 +1,27 @@
 # Building
 
-Produces `dist/tailscale-fireos5-<version>-armeabi-v7a.apk` from upstream source pinned at
-commit `3926cf4b5611d444dae7efc50499f477371e7327`.
+Produces `dist/tailscale-fireos5-<ver>-minsdk22-armeabi-v7a.apk` from a chosen upstream
+release, with the API floor overridden back to 22.
 
-Roughly **10 minutes** on a modern machine with a fast connection. Most of that is
-downloading the ~1 GB Android NDK.
+Roughly **10 minutes** cold on a fast connection; most of that is the ~1 GB Android NDK.
+Subsequent builds reuse the checkout and caches and take a couple of minutes.
+
+## The API floor is enforced twice
+
+This is the part that is easy to get wrong. From 1.64.0 onward, lowering the floor requires
+patching **both** of these — the script does it for you:
+
+| Where | Upstream | Patched to |
+|---|---|---|
+| `android/build.gradle` | `minSdkVersion 26` | `minSdkVersion 22` |
+| `gomobile bind` | `-androidapi 26` | `-androidapi 22` |
+
+Patch only the Gradle value and you get an APK that installs cleanly and then dies in
+native code. The native `libtailscale.aar` carries its own independent gate.
+
+Because the floor is overridden rather than natively supported, the risk moves from
+compile time to **run time**. Watch for `NoSuchMethodError`, `NoClassDefFoundError`, and
+`VerifyError` — each means the code reached for an API newer than 22.
 
 ---
 
@@ -59,31 +76,47 @@ Override anything via environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `TS_REF` | `1.64.0-t78dc8622d-gfd2ca6fa940` | upstream tag or commit to build |
+| `MIN_SDK` | `22` | API floor; patched into Gradle **and** gomobile |
+| `GOMOBILE_TARGET` | `android/arm` | `android` for all ABIs (slower, larger) |
 | `ANDROID_SDK_ROOT` | `~/Library/Android/sdk` (mac), `~/Android/Sdk` (linux) | SDK location |
 | `JAVA_HOME` | autodetected JDK 17 | |
-| `TS_ARCH` | `arm` | `arm,arm64` to also build 64-bit |
-| `WORKDIR` | `.build` | scratch checkout |
+| `WORKDIR` | `.build` | scratch checkout, one dir per ref |
 | `SKIP_TESTS` | `1` | set `0` to run upstream unit tests |
+
+### Choosing `TS_REF`
+
+| Ref | UI | Notes |
+|---|---|---|
+| `3926cf4b56` | **stubs** | renders, but Connect is inert and Settings is a placeholder. Historical interest only |
+| **`1.64.0-…`** | complete | **default.** Earliest finished Compose UI → least API-26 creep |
+| `1.68.0-…` / `1.76.2-…` / `1.78.0-…` | complete | newer; 1.78.0 adds *"don't show permissions for TV"*, but more API-26 exposure |
+
+If 1.64.0 hits a runtime `NoSuchMethodError`, try a *newer* ref (bug may be fixed) or
+raise `MIN_SDK` and accept the device is out of reach.
 
 ## What it does
 
-1. **Preflight** — verifies JDK 17, Go, disk space, and the SDK; fails fast on any gap.
-2. **Installs missing SDK packages** via `sdkmanager` (accepting licenses).
-3. **Shallow-fetches** exactly one commit — no history clone.
-4. **Fetches Tailscale's pinned Go toolchain** into
-   `~/.cache/tailscale-android-go-<ver>`, matching upstream's `Makefile`. The
-   `tailscale_go` build tag needs their fork; stock Go will not do.
-5. **Builds `ipn.aar`** with `gogio -arch arm` — **one ABI instead of four**, the single
-   biggest time saving.
-6. **Assembles the APK** with `./gradlew assembleFdroidDebug`, skipping the `test` task.
-7. **Verifies** the result with `scripts/verify-apk.py` — hard-fails if `minSdk > 22` or
-   `armeabi-v7a` is missing, so a silently-wrong artifact can't reach `dist/`.
+1. **Preflight** — verifies JDK 17, Go and the SDK; refuses to start on the wrong JDK.
+2. **Installs missing SDK packages** via `sdkmanager` (NDK, platform-34, build-tools).
+3. **Shallow-fetches** the single ref — no history clone. Re-runs reset any prior patches
+   so overrides always apply to pristine sources.
+4. **Go toolchain** — uses upstream's `tool/go` wrapper when present (it fetches
+   Tailscale's own pinned Go), otherwise falls back to system Go.
+5. **Applies the API-floor overrides** (both places, see above) and writes a
+   `local.properties` stub, without which `getLocalProperty()` breaks configuration.
+6. **Builds the native library** — auto-detects the recipe: `gomobile bind` against
+   `./libtailscale` on 1.64.0+, or legacy `gogio` on older refs. One ABI, not four.
+7. **Assembles the APK** — picks `assembleFdroidDebug` or `assembleDebug` depending on
+   whether the ref still has flavors, and skips the `test` task.
+8. **Verifies** with `scripts/verify-apk.py`, which hard-fails on `minSdk` too high or a
+   missing ABI. A rejected artifact is deleted rather than written to `dist/`.
 
 Output:
 
 ```
-dist/tailscale-fireos5-<version>-armeabi-v7a.apk
-dist/tailscale-fireos5-<version>-armeabi-v7a.apk.sha256
+dist/tailscale-fireos5-<ver>-minsdk22-armeabi-v7a.apk
+dist/tailscale-fireos5-<ver>-minsdk22-armeabi-v7a.apk.sha256
 ```
 
 ## Install and test
