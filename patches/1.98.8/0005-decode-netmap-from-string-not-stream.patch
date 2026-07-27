@@ -12,22 +12,26 @@ index 367bb68..d63846f 100644
  
  // When set to true, the Notifier will inject fake health warnings for testing purposes
  val INJECT_FAKE_HEALTH_WARNINGS = false
-@@ -77,7 +77,18 @@ object Notifier {
+@@ -77,7 +77,22 @@ object Notifier {
                NotifyWatchOpt.RateLimitNetmaps.value
        manager =
            app.watchNotifications(mask.toLong()) { notification ->
 -            val notify = decoder.decodeFromStream<Notify>(notification.inputStream())
 +            // Decode from a String, not decodeFromStream.
 +            //
-+            // decodeFromStream reads through a ~16KB internal buffer and mishandles a
-+            // multi-byte UTF-8 sequence that straddles the boundary, throwing
-+            //   IllegalArgumentException: Bad position (limit 16257): -122
-+            // Only the netmap notification is large enough to hit this (28KB here), and
-+            // only when a non-ASCII character lands on the seam — e.g. a device named
-+            // with a curly apostrophe. State and Prefs notifications are small and always
-+            // decoded fine, so the failure looked like "peers never arrive" rather than a
-+            // decoding bug. The exception propagated out of the Go callback and the whole
-+            // notification was dropped silently.
++            // decodeFromStream routes through Android's CharsetDecoderICU, which is
++            // broken on API <= 23: CharsetReader.doRead() passes it a CharBuffer from
++            // CharBuffer.wrap(..).slice(), whose arrayOffset() is non-zero, and
++            // setPosition() then computes a negative position, throwing
++            //   IllegalArgumentException: Bad position (limit 16261): -118
++            // Google fixed this at API 24. See kotlinx.serialization#2457.
++            //
++            // The slice only appears on the loop's second pass, so the payload must
++            // exceed the 16KB internal buffer; size alone is the trigger. Only the
++            // netmap notification is that large (28KB here). State and Prefs are small
++            // and always decoded fine, so the failure looked like "peers never arrive"
++            // rather than a decoding bug. The exception propagated out of the Go
++            // callback and the whole notification was dropped silently.
 +            val notify = decoder.decodeFromString<Notify>(String(notification, Charsets.UTF_8))
              notify.State?.let { state.set(Ipn.State.fromInt(it)) }
              notify.NetMap?.let(netmap::set)

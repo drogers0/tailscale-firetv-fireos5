@@ -16,8 +16,9 @@ patching **both** of these — the script does it for you:
 | `android/build.gradle` | `minSdkVersion 26` | `minSdkVersion 22` |
 | `gomobile bind` | `-androidapi 26` | `-androidapi 22` |
 
-Patch only the Gradle value and you get an APK that installs cleanly and then dies in
-native code. The native `libtailscale.aar` carries its own independent gate.
+> [!WARNING]
+> Patch only the Gradle value and you get an APK that installs cleanly and then dies in
+> native code. The native `libtailscale.aar` carries its own independent gate.
 
 Because the floor is overridden rather than natively supported, the risk moves from
 compile time to **run time**. Watch for `NoSuchMethodError`, `NoClassDefFoundError`, and
@@ -162,6 +163,7 @@ fatal error: no support for OpenGL ES 3 nor EXT_sRGB
 
 or `fatal error: glGetError: 0x501`. Both mean the UI still wants GLES 3.
 
+> [!IMPORTANT]
 > Reaching `NeedsLogin` proves only that *networking* works — the Gio builds get that far
 > too, then die. The UI has to actually render.
 

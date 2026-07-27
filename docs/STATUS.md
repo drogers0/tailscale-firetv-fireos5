@@ -26,6 +26,7 @@ On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
 | **Traffic through exit node** | ✅ **1 MB download → 1,113,884 bytes over `tun0`** |
 | Survives reboot | ❌ VPN does not auto-start — see below |
 
+> [!TIP]
 > **Measuring exit-node routing:** public egress IP is an unreliable check — if the exit
 > node sits behind the same internet connection, both ends report the same address. Use the
 > tunnel byte counters instead. Without an exit node selected, public-internet traffic never
@@ -47,9 +48,10 @@ This is upstream behaviour, not a patch gap: Tailscale's Android manifest declar
 WorkManager. Upstream relies on Android's **always-on VPN**, which is API 24+ and
 unavailable here (`settings get secure always_on_vpn_app` returns `null` on Fire OS 5).
 
-**Workaround:** open the Tailscale app once after a reboot. Everything else persists —
-login, chosen exit node, prefs. Verified: after a cold boot, launching the app restored the
-tunnel and exit-node routing (1,116,625 bytes over `tun0`) with no reconfiguration.
+> [!TIP]
+> **Workaround:** open the Tailscale app once after a reboot. Everything else persists —
+> login, chosen exit node, prefs. Verified: after a cold boot, launching the app restored
+> the tunnel and exit-node routing (1,116,625 bytes over `tun0`) with no reconfiguration.
 
 ## Build
 
@@ -68,28 +70,38 @@ if any does not.
 | 0002 | `QuickToggleService : TileService`, 2 call sites | 24 |
 | 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 |
 | 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 |
-| 0005 | netmap decode: `decodeFromString`, not `decodeFromStream` | — |
+| 0005 | netmap decode: `decodeFromString`, not `decodeFromStream` | ≤23 |
 | 0006 | drop `setExpedited` from `IPNReceiver` work requests | 31 |
 | 0007 | `coreLibraryDesugaring` for `java.time` | 26 |
 
 Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
-these are that, **except 0005** — which is not API-related at all.
+these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
+API 24.
 
 ### 0005 is the interesting one
 
 ```
-IllegalArgumentException: Bad position (limit 16257): -122
+IllegalArgumentException: Bad position (limit 16261): -118
 ```
 
-`decodeFromStream` reads through a ~16 KB buffer and corrupts a multi-byte UTF-8 sequence
-straddling the boundary. Only the netmap notification is large enough to reach it (28 KB
-here), and only when a non-ASCII character lands on the seam — in this case a device named
-with a curly apostrophe. State and Prefs notifications are small and always decoded fine,
-so **peers silently never arrived while everything else worked**. The exception escaped the
-Go callback and the entire notification was dropped, with no error anywhere.
+A defect in Android's own `CharsetDecoderICU`, which `decodeFromStream` reaches through —
+not a Tailscale bug. `CharsetReader.doRead()` hands the decoder a `CharBuffer` built with
+`CharBuffer.wrap(...).slice()`, so its `arrayOffset()` is non-zero. On API ≤ 23,
+`CharsetDecoderICU.setPosition()` computes `position + outputOffset - arrayOffset()`, lands
+on a negative value, and `Buffer.position()` rejects it. Fixed in Android at API 24;
+`decodeFromString` is the workaround below that
+([kotlinx.serialization#2457](https://github.com/Kotlin/kotlinx.serialization/issues/2457)).
 
-Upstream is exposed to this too, given a large enough netmap with non-ASCII at the wrong
-offset. It is luck, not API level.
+The slice only appears on the second trip through the decode loop, so the payload has to
+exceed the 16 KB internal buffer. **Size alone is the trigger** — the content does not
+matter, and the offsets in the message vary between runs. Only the netmap notification is
+that large (28 KB here); State and Prefs are small and always decoded fine, so **peers
+silently never arrived while everything else worked**. The exception escaped the Go
+callback and the entire notification was dropped, with no error anywhere.
+
+Upstream never meets this — it ships minSdk 26, above the API 24 fix. kotlinx.serialization
+became exposed only in 1.5.0, when `CharsetReader` was added as an optimization; Tailscale
+pins 1.6.3.
 
 ### 0004 — the connectivity fix
 
@@ -110,9 +122,10 @@ adb shell am broadcast -a com.tailscale.ipn.USE_EXIT_NODE \
   --es exitNode 'exit-node-host.othernet.ts.net' --ez allowLanAccess true
 ```
 
-The name must match `displayName` (`ComputedName ?: Name`) **exactly** — for a shared node
-that is the full FQDN, not the short hostname. A mismatch fails silently apart from a
-notification.
+> [!IMPORTANT]
+> The name must match `displayName` (`ComputedName ?: Name`) **exactly** — for a shared
+> node that is the full FQDN, not the short hostname. A mismatch fails silently apart from
+> a notification.
 
 Routes only take effect once the tunnel is re-established, so reconnect afterwards:
 
@@ -154,11 +167,10 @@ It lives in two places instead:
 passphrase as `TS_KEYSTORE_PASSWORD` → macOS Keychain (`tailscale-firetv-release`/`firetv`)
 → password file → prompt. The same script works locally and in CI.
 
-> ### ⚠️ GitHub secrets are write-only
->
-> They cannot be read back. **The local keystore is the only recoverable copy** — back it up
-> to a password manager. Losing it means every future release breaks in-place upgrades and
-> the signing identity has to be rotated.
+> [!CAUTION]
+> **GitHub secrets are write-only.** They cannot be read back. **The local keystore is the
+> only recoverable copy** — back it up to a password manager. Losing it means every future
+> release breaks in-place upgrades and the signing identity has to be rotated.
 
 Store the passphrase on a new machine with:
 
@@ -206,6 +218,4 @@ Everything needed works. Optional polish:
 
 1. `NetworkChangeCallback` never fires on API 22, so `protect()` pins to nothing. Equivalent
    on a single-uplink device; would matter on multi-uplink.
-2. Patch 0005 is arguably worth reporting upstream — the `decodeFromStream` UTF-8 boundary
-   bug is not API-22-specific.
-3. Launch is slow, 5-7 s to first frame, on this hardware.
+2. Launch is slow, 5-7 s to first frame, on this hardware.
