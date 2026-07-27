@@ -70,28 +70,38 @@ if any does not.
 | 0002 | `QuickToggleService : TileService`, 2 call sites | 24 |
 | 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 |
 | 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 |
-| 0005 | netmap decode: `decodeFromString`, not `decodeFromStream` | — |
+| 0005 | netmap decode: `decodeFromString`, not `decodeFromStream` | ≤23 |
 | 0006 | drop `setExpedited` from `IPNReceiver` work requests | 31 |
 | 0007 | `coreLibraryDesugaring` for `java.time` | 26 |
 
 Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
-these are that, **except 0005** — which is not API-related at all.
+these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
+API 24.
 
 ### 0005 is the interesting one
 
 ```
-IllegalArgumentException: Bad position (limit 16257): -122
+IllegalArgumentException: Bad position (limit 16261): -118
 ```
 
-`decodeFromStream` reads through a ~16 KB buffer and corrupts a multi-byte UTF-8 sequence
-straddling the boundary. Only the netmap notification is large enough to reach it (28 KB
-here), and only when a non-ASCII character lands on the seam — in this case a device named
-with a curly apostrophe. State and Prefs notifications are small and always decoded fine,
-so **peers silently never arrived while everything else worked**. The exception escaped the
-Go callback and the entire notification was dropped, with no error anywhere.
+A defect in Android's own `CharsetDecoderICU`, which `decodeFromStream` reaches through —
+not a Tailscale bug. `CharsetReader.doRead()` hands the decoder a `CharBuffer` built with
+`CharBuffer.wrap(...).slice()`, so its `arrayOffset()` is non-zero. On API ≤ 23,
+`CharsetDecoderICU.setPosition()` computes `position + outputOffset - arrayOffset()`, lands
+on a negative value, and `Buffer.position()` rejects it. Fixed in Android at API 24;
+`decodeFromString` is the workaround below that
+([kotlinx.serialization#2457](https://github.com/Kotlin/kotlinx.serialization/issues/2457)).
 
-Upstream is exposed to this too, given a large enough netmap with non-ASCII at the wrong
-offset. It is luck, not API level.
+The slice only appears on the second trip through the decode loop, so the payload has to
+exceed the 16 KB internal buffer. **Size alone is the trigger** — the content does not
+matter, and the offsets in the message vary between runs. Only the netmap notification is
+that large (28 KB here); State and Prefs are small and always decoded fine, so **peers
+silently never arrived while everything else worked**. The exception escaped the Go
+callback and the entire notification was dropped, with no error anywhere.
+
+Upstream never meets this — it ships minSdk 26, above the API 24 fix. kotlinx.serialization
+became exposed only in 1.5.0, when `CharsetReader` was added as an optimization; Tailscale
+pins 1.6.3.
 
 ### 0004 — the connectivity fix
 
@@ -208,6 +218,4 @@ Everything needed works. Optional polish:
 
 1. `NetworkChangeCallback` never fires on API 22, so `protect()` pins to nothing. Equivalent
    on a single-uplink device; would matter on multi-uplink.
-2. Patch 0005 is arguably worth reporting upstream — the `decodeFromStream` UTF-8 boundary
-   bug is not API-22-specific.
-3. Launch is slow, 5-7 s to first frame, on this hardware.
+2. Launch is slow, 5-7 s to first frame, on this hardware.
