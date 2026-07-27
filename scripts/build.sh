@@ -24,8 +24,8 @@ NDK_VERSION="${NDK_VERSION:-23.1.7779620}"
 
 # ---- tunables ---------------------------------------------------------------
 MIN_SDK="${MIN_SDK:-22}"           # device API level
-TS_ARCH="${TS_ARCH:-arm}"          # gogio recipe only; armeabi-v7a
-GOMOBILE_TARGET="${GOMOBILE_TARGET:-android/arm}"
+TS_ARCH="${TS_ARCH:-arm}"          # legacy gogio recipe only; empty = every ABI
+GOMOBILE_TARGET="${GOMOBILE_TARGET:-android/arm}"   # modern recipe; arm = armeabi-v7a
 WORKDIR="${WORKDIR:-.build}"
 SKIP_TESTS="${SKIP_TESTS:-1}"
 GRADLE_HEAP="${GRADLE_HEAP:-6g}"
@@ -38,6 +38,18 @@ bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+# gomobile/gogio arch name -> Android ABI directory name. Used for the artifact
+# filename and for the ABI assertion in step 8, so both follow what was built.
+abi_for() {
+  case "$1" in
+    arm)   echo armeabi-v7a ;;
+    arm64) echo arm64-v8a ;;
+    386)   echo x86 ;;
+    amd64) echo x86_64 ;;
+    *)     die "unsupported arch '$1' — want arm, arm64, 386 or amd64" ;;
+  esac
+}
 
 # ---- 1. preflight -----------------------------------------------------------
 info "Preflight  (ref=$TS_REF  minSdk=$MIN_SDK)"
@@ -187,10 +199,20 @@ fi
 
 # ---- 6. native library ------------------------------------------------------
 mkdir -p "$SRC/android/libs"
+
+# A multi-ABI build is named "universal" but must still carry armeabi-v7a; a
+# single-ABI build is named and asserted as whatever arch it targeted.
+ABI_LABEL="universal"; TARGET_ABI="armeabi-v7a"
+
 if [ -d "$SRC/libtailscale" ]; then
   # Modern recipe: gomobile bind. The -androidapi flag is a second, independent
   # API gate — leaving it at 26 yields an APK that installs then dies natively.
   info "Native: gomobile bind (androidapi=$MIN_SDK, target=$GOMOBILE_TARGET)"
+  case "$GOMOBILE_TARGET" in
+    *,*) ;;                                                     # list of targets
+    */*) TARGET_ABI="$(abi_for "${GOMOBILE_TARGET#*/}")"; ABI_LABEL="$TARGET_ABI" ;;
+    *)   ;;                                                     # bare "android"
+  esac
   export GOBIN="$SRC/.gobin"; mkdir -p "$GOBIN"
   export PATH="$GOBIN:$PATH"
   ( cd "$SRC" && "$GO" install golang.org/x/mobile/cmd/gobind golang.org/x/mobile/cmd/gomobile )
@@ -218,7 +240,8 @@ if [ -d "$SRC/libtailscale" ]; then
   info "libtailscale.aar: $(du -h "$SRC/android/libs/libtailscale.aar" | cut -f1)"
 else
   # Legacy recipe: gogio archive.
-  info "Native: gogio (arch=$TS_ARCH)"
+  info "Native: gogio (arch=${TS_ARCH:-all})"
+  if [ -n "$TS_ARCH" ]; then TARGET_ABI="$(abi_for "$TS_ARCH")"; ABI_LABEL="$TARGET_ABI"; fi
   VN="$(grep -m1 versionName "$BG" 2>/dev/null | sed -E 's/.*"(.*)".*/\1/' || true)"
   ARCH_FLAG=(); [ -n "$TS_ARCH" ] && ARCH_FLAG=(-arch "$TS_ARCH")
   ( cd "$SRC" && "$GO" run gioui.org/cmd/gogio \
@@ -257,11 +280,11 @@ APK="$(ls -1 $APK_GLOB 2>/dev/null | head -1)"
 # ---- 8. verify + publish ----------------------------------------------------
 mkdir -p "$DIST"
 VER="$(cd "$SRC" && git describe --tags --always 2>/dev/null || echo "$TS_REF")"
-OUT="$DIST/tailscale-fireos5-${TS_REF%%-*}-minsdk${MIN_SDK}-armeabi-v7a.apk"
+OUT="$DIST/tailscale-fireos5-${TS_REF%%-*}-minsdk${MIN_SDK}-${ABI_LABEL}.apk"
 cp "$APK" "$OUT"
 
-info "Verifying (minSdk <= $MIN_SDK, armeabi-v7a present)"
-if ! python3 "$REPO_ROOT/scripts/verify-apk.py" --require-min-sdk "$MIN_SDK" --require-abi armeabi-v7a "$OUT"; then
+info "Verifying (minSdk <= $MIN_SDK, $TARGET_ABI present)"
+if ! python3 "$REPO_ROOT/scripts/verify-apk.py" --require-min-sdk "$MIN_SDK" --require-abi "$TARGET_ABI" "$OUT"; then
   rm -f "$OUT"
   die "verification failed — artifact rejected"
 fi

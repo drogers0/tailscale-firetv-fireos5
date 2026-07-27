@@ -20,8 +20,6 @@ import subprocess
 import sys
 import zipfile
 
-DEVICE_ABIS = {"armeabi-v7a", "armeabi"}
-
 
 def read_with_pyaxmlparser(path):
     try:
