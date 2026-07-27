@@ -11,7 +11,9 @@
 # minifyEnabled + shrinkResources, and ProGuard is a real risk to kotlinx.serialization and
 # the gomobile JNI bindings. Re-signing keeps the exact bytes we tested.
 #
-# The keystore and its password live OUTSIDE the repo and must never be committed.
+# The keystore and its password live OUTSIDE the repo and must never be committed — not
+# even encrypted, since this repo is intended to be public and a published signing key
+# cannot be un-published.
 #
 # Usage:
 #   ./scripts/sign-apk.sh [apk]              # defaults to the newest APK in dist/
@@ -21,6 +23,10 @@
 #   TS_KEYSTORE_PASS_FILE
 #                     default ~/.keystores/tailscale-firetv-release.pass
 #   TS_KEY_ALIAS      default firetv
+#   TS_KEYSTORE_BASE64 / TS_KEYSTORE_PASSWORD
+#                     CI path, supplied from GitHub repo secrets
+#   TS_KEYSTORE_ENCRYPTED
+#                     optional path to a gpg-encrypted keystore (kept out of tree)
 #
 # Create a keystore once with:
 #   keytool -genkeypair -v -keystore "$TS_KEYSTORE" -alias firetv \
@@ -37,7 +43,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-ENCRYPTED="$REPO_ROOT/secrets/tailscale-firetv-release.jks.gpg"
+# Intentionally NOT stored in this repo — see STATUS.md. Set TS_KEYSTORE_ENCRYPTED to
+# an out-of-tree gpg-encrypted keystore if you prefer that to a plain .jks on disk.
+ENCRYPTED="${TS_KEYSTORE_ENCRYPTED:-}"
 KEYCHAIN_SERVICE="tailscale-firetv-release"
 KEYCHAIN_ACCOUNT="firetv"
 
@@ -63,15 +71,15 @@ resolve_pass() {
 }
 
 # ---- resolve the keystore ---------------------------------------------------
-# 1. TS_KEYSTORE_BASE64     (CI, from GitHub secrets)
-# 2. secrets/*.jks.gpg      (committed, encrypted — the portable path)
-# 3. plain on-disk keystore (legacy)
+# 1. TS_KEYSTORE_BASE64      (CI, from GitHub secrets)
+# 2. TS_KEYSTORE_ENCRYPTED   (optional out-of-tree gpg-encrypted keystore)
+# 3. plain on-disk keystore  (default: ~/.keystores/tailscale-firetv-release.jks)
 if [ -n "${TS_KEYSTORE_BASE64:-}" ]; then
   CLEANUP_KS="$(mktemp -t tsks)"; chmod 600 "$CLEANUP_KS"
   printf '%s' "$TS_KEYSTORE_BASE64" | base64 --decode > "$CLEANUP_KS"
   KEYSTORE="$CLEANUP_KS"
   info "keystore: TS_KEYSTORE_BASE64 (CI secret)"
-elif [ -f "$ENCRYPTED" ]; then
+elif [ -n "$ENCRYPTED" ] && [ -f "$ENCRYPTED" ]; then
   command -v gpg >/dev/null 2>&1 || die "gpg needed to decrypt $ENCRYPTED"
   PASS="$(resolve_pass)"
   CLEANUP_KS="$(mktemp -t tsks)"; chmod 600 "$CLEANUP_KS"
@@ -79,7 +87,7 @@ elif [ -f "$ENCRYPTED" ]; then
       --decrypt "$ENCRYPTED" > "$CLEANUP_KS" 2>/dev/null \
     || die "could not decrypt $ENCRYPTED (wrong passphrase?)"
   KEYSTORE="$CLEANUP_KS"
-  info "keystore: secrets/$(basename "$ENCRYPTED") (decrypted in memory-backed temp)"
+  info "keystore: $(basename "$ENCRYPTED") (decrypted to a temp file, removed on exit)"
 else
   info "keystore: $KEYSTORE"
 fi

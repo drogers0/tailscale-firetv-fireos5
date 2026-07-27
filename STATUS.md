@@ -138,27 +138,26 @@ the same commit produce APKs that cannot upgrade over one another.
 
 Signer: `CN=tailscale-firetv-fireos5`, SHA-256 `b6e56d68…53b5`.
 
-The key **lives in the repo, encrypted**: `secrets/tailscale-firetv-release.jks.gpg`
-(GPG symmetric, AES-256, SHA-512 KDF, 65M iterations). It travels with the repo and survives
-machine loss. See [secrets/README.md](secrets/README.md).
+The signing key is **deliberately not in this repo.** A public repo would expose the
+encrypted blob to indefinite offline attack, and a signing key is a one-way door — once
+published it can never be un-published.
 
-The passphrase is the one thing that cannot live in the repo — otherwise cloning it would be
-enough to sign as you. `sign-apk.sh` resolves it in this order:
+It lives in two places instead:
 
-| | Source |
+| Where | Purpose |
 |---|---|
-| 1 | `TS_KEYSTORE_PASSWORD` env var — CI, from GitHub secrets |
-| 2 | **macOS Keychain** — service `tailscale-firetv-release`, account `firetv` |
-| 3 | `~/.keystores/tailscale-firetv-release.pass` — legacy |
-| 4 | interactive prompt |
+| GitHub repo secrets — `TS_KEYSTORE_BASE64`, `TS_KEYSTORE_PASSWORD`, `TS_KEY_ALIAS` | CI signing |
+| `~/.keystores/tailscale-firetv-release.{jks,pass}` (mode 0600) + password manager | the recoverable backup |
 
-The keystore itself resolves as: `TS_KEYSTORE_BASE64` (CI) → encrypted file in the repo →
-plain local `.jks`. Verified working with **no local keystore and no env vars** — decrypted
-from the repo with the Keychain passphrase.
+`sign-apk.sh` resolves the keystore as `TS_KEYSTORE_BASE64` → local `.jks`, and the
+passphrase as `TS_KEYSTORE_PASSWORD` → macOS Keychain (`tailscale-firetv-release`/`firetv`)
+→ password file → prompt. The same script works locally and in CI.
 
-GitHub secrets (`TS_KEYSTORE_BASE64`, `TS_KEYSTORE_PASSWORD`, `TS_KEY_ALIAS`) remain set for
-CI. Note they are **write-only** — you cannot read them back — which is exactly why the
-encrypted copy in the repo is the real backup.
+> ### ⚠️ GitHub secrets are write-only
+>
+> They cannot be read back. **The local keystore is the only recoverable copy** — back it up
+> to a password manager. Losing it means every future release breaks in-place upgrades and
+> the signing identity has to be rotated.
 
 Store the passphrase on a new machine with:
 
