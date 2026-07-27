@@ -55,11 +55,15 @@ and restores the old floor, in both places it is enforced:
 
 Overriding only the first yields an APK that installs and then dies in native code.
 
-Default target is **1.64.0** — the earliest release with a complete Compose UI (working
-settings screen and exit-node picker), and therefore the least accumulated reliance on
-API 26+. Built `armeabi-v7a`-only, the single ABI these devices use. Tailscale dropped
-Google Play Services before this release, so nothing here depends on services Fire OS
-lacks.
+Default target is **1.98.8**, current stable — measured empirically: it needs only three
+more patches than the 2024-era 1.64.0, and wins decisively on Go-core age, control-plane
+compatibility, and cheap rebases. Built `armeabi-v7a`-only, the single ABI these devices
+use. Tailscale dropped Google Play Services before this release, so nothing here depends
+on services Fire OS lacks.
+
+Beyond the API floor, running at API 22 needed six code patches — five for API guards that
+rotted into dead code at minSdk 26, and one for a `decodeFromStream` UTF-8 buffer bug that
+is not API-specific at all. See [STATUS.md](STATUS.md).
 
 ## Verified target device
 
@@ -145,7 +149,7 @@ endorsed by them, uses the name only to identify what the software is, and shoul
 mistaken for an official distribution. **Do not report problems with these builds to
 Tailscale.** Open an issue here instead.
 
-APKs are **debug-signed** (`assembleFdroidDebug`) and share the upstream application ID
+APKs are **debug-signed** (`assembleDebug`) and share the upstream application ID
 `com.tailscale.ipn`, so they cannot be installed alongside an official Tailscale build.
 
 Build scripts in this repo are MIT licensed — see [LICENSE](LICENSE). That covers the
