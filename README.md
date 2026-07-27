@@ -7,6 +7,7 @@ cannot support.
 Current stable **Tailscale 1.98.8**, patched to run at API 22, **routing traffic through an
 exit node**.
 
+> [!IMPORTANT]
 > **Unofficial community build.** Not affiliated with, endorsed by, or supported by
 > Tailscale Inc. See [Legal](#legal).
 
@@ -34,8 +35,9 @@ cd tailscale-firetv-fireos5
 adb install -r dist/tailscale-fireos5-*.apk
 ```
 
-Prefer not to build? Take an APK from [Releases](../../releases) and check its `sha256`
-against the published checksum.
+> [!TIP]
+> Prefer not to build? Take an APK from [Releases](../../releases) and check its `sha256`
+> against the published checksum.
 
 ## Documentation
 
@@ -56,8 +58,9 @@ endorsed by them, uses the name only to identify what the software is, and shoul
 mistaken for an official distribution. **Do not report problems with these builds to
 Tailscale** — open an issue here.
 
-APKs are **debug-signed** and share the upstream application ID `com.tailscale.ipn`, so
-they cannot be installed alongside an official Tailscale build.
+> [!CAUTION]
+> APKs are **debug-signed** and share the upstream application ID `com.tailscale.ipn`, so
+> they cannot be installed alongside an official Tailscale build.
 
 Build scripts here are MIT licensed ([LICENSE](LICENSE)) — that covers the scripts only,
 not the Tailscale source they compile.

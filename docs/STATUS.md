@@ -26,6 +26,7 @@ On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
 | **Traffic through exit node** | ✅ **1 MB download → 1,113,884 bytes over `tun0`** |
 | Survives reboot | ❌ VPN does not auto-start — see below |
 
+> [!TIP]
 > **Measuring exit-node routing:** public egress IP is an unreliable check — if the exit
 > node sits behind the same internet connection, both ends report the same address. Use the
 > tunnel byte counters instead. Without an exit node selected, public-internet traffic never
@@ -47,9 +48,10 @@ This is upstream behaviour, not a patch gap: Tailscale's Android manifest declar
 WorkManager. Upstream relies on Android's **always-on VPN**, which is API 24+ and
 unavailable here (`settings get secure always_on_vpn_app` returns `null` on Fire OS 5).
 
-**Workaround:** open the Tailscale app once after a reboot. Everything else persists —
-login, chosen exit node, prefs. Verified: after a cold boot, launching the app restored the
-tunnel and exit-node routing (1,116,625 bytes over `tun0`) with no reconfiguration.
+> [!TIP]
+> **Workaround:** open the Tailscale app once after a reboot. Everything else persists —
+> login, chosen exit node, prefs. Verified: after a cold boot, launching the app restored
+> the tunnel and exit-node routing (1,116,625 bytes over `tun0`) with no reconfiguration.
 
 ## Build
 
@@ -110,9 +112,10 @@ adb shell am broadcast -a com.tailscale.ipn.USE_EXIT_NODE \
   --es exitNode 'exit-node-host.othernet.ts.net' --ez allowLanAccess true
 ```
 
-The name must match `displayName` (`ComputedName ?: Name`) **exactly** — for a shared node
-that is the full FQDN, not the short hostname. A mismatch fails silently apart from a
-notification.
+> [!IMPORTANT]
+> The name must match `displayName` (`ComputedName ?: Name`) **exactly** — for a shared
+> node that is the full FQDN, not the short hostname. A mismatch fails silently apart from
+> a notification.
 
 Routes only take effect once the tunnel is re-established, so reconnect afterwards:
 
@@ -154,11 +157,10 @@ It lives in two places instead:
 passphrase as `TS_KEYSTORE_PASSWORD` → macOS Keychain (`tailscale-firetv-release`/`firetv`)
 → password file → prompt. The same script works locally and in CI.
 
-> ### ⚠️ GitHub secrets are write-only
->
-> They cannot be read back. **The local keystore is the only recoverable copy** — back it up
-> to a password manager. Losing it means every future release breaks in-place upgrades and
-> the signing identity has to be rotated.
+> [!CAUTION]
+> **GitHub secrets are write-only.** They cannot be read back. **The local keystore is the
+> only recoverable copy** — back it up to a password manager. Losing it means every future
+> release breaks in-place upgrades and the signing identity has to be rotated.
 
 Store the passphrase on a new machine with:
 

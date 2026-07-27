@@ -75,7 +75,8 @@ Traced through every commit touching `android/build.gradle` in `tailscale/tailsc
 
 **Tailscale supported API 22 continuously for 3.5 years**, from 2020-08-13 to 2024-03-13.
 
-> ⚠️ It went 23 → 22 → 23 → 22 → 26. A binary search over this history returns a **wrong
+> [!WARNING]
+> It went 23 → 22 → 23 → 22 → 26. A binary search over this history returns a **wrong
 > answer** — it reports 23 as the floor while the shipped v1.2.2 APK is demonstrably 22.
 > Scan linearly.
 
@@ -104,7 +105,8 @@ Compose renders through Android's standard hardware canvas — **no GLES 3 requi
 The module carries the full VPN plumbing — `IPNService.java`, `App.java`,
 `StartVPNWorker`, `QuickToggleService`, `MDMSettings.kt`.
 
-> ### ⚠️ Corrected 2026-07-26 — this commit's UI is a set of stubs
+> [!WARNING]
+> **Corrected 2026-07-26 — this commit's UI is a set of stubs.**
 >
 > An earlier revision of this document claimed the screens were complete because
 > `SettingsView.kt` and `ExitNodePicker.kt` exist at this commit. **That inference was
@@ -187,6 +189,7 @@ Crucially, that window was never released:
   `iisimpler`) — no fork targeting old Fire TV or lowering minSdk.
 - No community build recipe found.
 
+> [!NOTE]
 > **Gap in this search:** xdaforums.com returned HTTP 403, so the main Fire TV + Tailscale
 > thread could not be read, and forum content indexes poorly. This is *no evidence found*,
 > not proof of absence.
