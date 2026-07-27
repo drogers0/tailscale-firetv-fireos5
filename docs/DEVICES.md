@@ -49,69 +49,73 @@ this build or a two-year-old release; the official client still won't install, b
 `Official`: API 26+, use the [official client](https://tailscale.com/docs/install/android).
 `Neither`: below the API 22 floor or not Android — nothing here helps.
 
-**Tested** — ✅ verified on hardware, — untested. For non-Amazon rows describing a class of
-hardware rather than one product, **Model** is the SoC.
+**Tested** — ✅ verified on hardware, — untested.
 
-| Device | Model | API | GPU | GLES | Verdict | Tested |
-|---|---|---|---|---|---|---|
-| **▸ Amazon Fire TV** | | | | | | |
-| Fire TV Stick 2nd gen (2016–2019) | `AFTT` / tank | 22 | Mali-450 MP4 | **2.0** | **Required** | ✅ |
-| Fire TV Stick Basic Edition (2017) | `AFTT` | 22 | Mali-450 MP4 | **2.0** | **Required** | — ‡ |
-| Fire TV Stick 1st gen (2014) | `AFTM` / montoya | 22 | Broadcom VideoCore IV | **2.0** | **Required** | — |
-| Fire TV 3rd gen (2017) | `AFTN` | 25 | Mali-450 MP3 (Amlogic S905Z) | **2.0** | **Required** | — |
-| Fire TV Cube 1st gen (2018) | `AFTA` | 25 | Mali-450 MP3 (Amlogic S905Z) | **2.0** | **Required** | — |
-| Fire TV 1st gen (2014) | `AFTB` / bueller | 22 | Adreno 320 | 3.0 | Recommended | — |
-| Fire TV 2nd gen (2015) | `AFTS` / sloane | 22 | PowerVR Rogue GX6250 | 3.0 | Recommended | — |
-| Fire TV Stick 4K 1st gen (2018) | `AFTMM` | 25 | IMG GE8300 (MT8695) | 3.2 | Recommended | — |
-| Nebula / TCL Soundbar Fire TV Edition (2019) | `AFTMM` | 25 | IMG GE8300 (MT8695) | 3.2 | Recommended | — |
-| Element 4K Fire TV (2017) | `AFTRS` | 22 | ARM Mali, model unstated | ? | Recommended † | — |
-| Insignia 4K Fire TV (2018) | `AFTJMST12` | 25 | unpublished | ? | Recommended † | — |
-| Toshiba 4K Fire TV (2018–2019) | `AFTKMST12` | 25 | unpublished | ? | Recommended † | — |
-| Toshiba HD Fire TV (2018–2020) | `AFTBAMR311` | 25 | unpublished | ? | Recommended † | — |
-| Insignia HD Fire TV (2018–2020) | `AFTEAMR311` | 25 | unpublished | ? | Recommended † | — |
-| Onida HD Fire TV (2019) | `AFTLE` | 25 | unpublished | ? | Recommended † | — |
-| Onida HD/FHD Fire TV (2020) | `AFTTIFF55` | 25 | unpublished | ? | Recommended † | — |
-| AmazonBasics HD/FHD Fire TV (2020) | `AFTBU001` | 25 | unpublished | ? | Recommended † | — |
-| **▸ Amazon Fire tablets** — no Fire OS 6 generation existed | | | | | | |
-| Fire 7 (2017, 7th gen) | `KFAUWI` | 22 | Mali-450 MP4 | **2.0** | **Required** | — |
-| Fire (2015, 5th gen) | `KFFOWI` | 22 | Mali-450 | **2.0** | **Required** | — |
-| Fire HD 8 (2017, 7th gen) | `KFDOWI` | 22 | Mali-T720 MP2 | 3.1 | Recommended | — |
-| Fire HD 10 (2017, 7th gen) | `KFSUWI` | 22 | PowerVR GX6250 | 3.1 | Recommended | — |
-| Fire HD 8 (2016, 6th gen) | `KFGIWI` | 22 | Mali-T720 MP2 | 3.1 | Recommended | — |
-| Fire HD 8 (2015, 5th gen) | `KFMEWI` | 22 | unpublished | 3.0 | Recommended | — |
-| Fire HD 10 (2015, 5th gen) | `KFTBWI` | 22 | unpublished | 3.0 | Recommended | — |
-| Fire HDX 8.9 (2014, 4th gen) | `KFSAWI` / `KFSAWA` | 22 | Adreno 420 | 3.1 | Recommended | — |
-| Fire HD 7 (2014, 4th gen) | `KFASWI` | 22 | PowerVR G6200 | 3.0 | Recommended | — |
-| Fire HD 6 (2014, 4th gen) | `KFARWI` | 22 | PowerVR G6200 | 3.0 | Recommended | — |
-| **▸ Non-Amazon** — Model is the SoC where the row is a class | | | | | | |
-| MXQ, M8S and the clone-box wave | Amlogic S805 / S812 | 22 | Mali-450 MP2 / MP6 | **2.0** | **Required** | — |
-| The 2016–17 TV-box generation | Amlogic S905 / S905X | 22–25 | Mali-450 MP3 | **2.0** | **Required** | — |
-| Budget boxes and HDMI sticks | Rockchip RK3128 / RK3229 | 22–25 | Mali-400 MP2 | **2.0** | **Required** | — |
-| Later budget boxes | Rockchip RK3328 | 25 | Mali-450 MP2 | **2.0** | **Required** | — |
-| Sub-$100 phones, very high volume | MediaTek MT6580 | 22–23 | Mali-400 MP2 | **2.0** | **Required** | — |
-| Galaxy J3 2016 `SM-J320H` / `SM-J320F`, entry phones | Spreadtrum SC7731 / SC8830 / SC9830 | 22 | Mali-400 MP2 | **2.0** | **Required** | — |
-| White-label tablets and boxes | Allwinner A33 / A64 / H3 | 22–23 | Mali-400 MP2 / Mali-450 | **2.0** | **Required** | — |
-| Nexus 5 | — | 23 | Adreno 330 | 3.0 | Recommended | — |
-| Nexus 7 (2013) | — | 23 | Adreno 320 | 3.0 | Recommended | — |
-| Nexus 6 | — | 25 | Adreno 420 | 3.1 | Recommended | — |
-| Nexus 9 | — | 25 | Tegra K1 | 3.1 | Recommended | — |
-| Galaxy S5 | — | 23 | Adreno 330 | 3.0 | Recommended | — |
-| Galaxy Note 4 / Note Edge | — | 23 | Adreno 420 / Mali-T760 | 3.1 | Recommended | — |
-| LG G3 | — | 23 | Adreno 330 | 3.0 | Recommended | — |
-| Moto G 2nd / 3rd gen | — | 23 | Adreno 305 / 306 | 3.0 | Recommended | — |
-| Xperia Z3 | — | 23 | Adreno 330 | 3.0 | Recommended | — |
-| OnePlus One | — | 23 | Adreno 330 | 3.0 | Recommended | — |
-| Razer Forge TV | — | 23 | Adreno 420 | 3.1 | Recommended | — |
-| **▸ Out of range** — this build is not the answer | | | | | | |
-| Fire TV Stick 3rd gen / Lite, Stick 4K 2nd gen, Stick 4K Max, Cube 2nd/3rd gen, Fire TV 2/4-Series, Omni | various | 28–30 | various | 3.2 | Official | — |
-| Fire tablets, 2018 and later | various | 28–30 | various | 3.1+ | Official | — |
-| Nexus Player | — | 26 | PowerVR G6430 | 3.1 | Official | — |
-| Xiaomi Mi Box 3 | — | 26 | Mali-450 | **2.0** | Official | — § |
-| Galaxy S4 | — | 21 | Adreno 320 / Mali-T628 | 3.0 | Neither | — |
-| Kindle Fire HDX 7 / HDX 8.9 / HD 7 (2013) | `KFTHWI` / `KFAPWI` / `KFSOWI` | 19 | Adreno 330 | — | Neither | — |
-| Kindle Fire HD 7 / HD 8.9, Kindle Fire (2012) | `KFTT` / `KFJWI` / `KFOT` | 15 | PowerVR SGX540 | — | Neither | — |
-| Kindle Fire (2011) | — | 10 | PowerVR SGX540 | — | Neither | — |
-| Fire TV Stick 4K Select (2025), Stick HD (2026) | `AFTCA002` / `AFTCL001` | n/a | — | — | Neither | — ¶ |
+<table>
+<thead>
+<tr><th align="left">Device</th><th align="left">Model</th><th align="left">API</th><th align="left">GPU</th><th align="left">GLES</th><th align="left">Verdict</th><th align="left">Tested</th></tr>
+</thead>
+<tbody>
+<tr><th colspan="7" align="left">▸&nbsp;&nbsp;AMAZON FIRE TV</th></tr>
+<tr><td>Fire TV Stick 2nd gen (2016–2019)</td><td><code>AFTT</code> / tank</td><td>22</td><td>Mali-450 MP4</td><td><b>2.0</b></td><td><b>Required</b></td><td>✅</td></tr>
+<tr><td>Fire TV Stick Basic Edition (2017)</td><td><code>AFTT</code></td><td>22</td><td>Mali-450 MP4</td><td><b>2.0</b></td><td><b>Required</b></td><td>— ‡</td></tr>
+<tr><td>Fire TV Stick 1st gen (2014)</td><td><code>AFTM</code> / montoya</td><td>22</td><td>Broadcom VideoCore IV</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>Fire TV 3rd gen (2017)</td><td><code>AFTN</code></td><td>25</td><td>Mali-450 MP3 (Amlogic S905Z)</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>Fire TV Cube 1st gen (2018)</td><td><code>AFTA</code></td><td>25</td><td>Mali-450 MP3 (Amlogic S905Z)</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>Fire TV 1st gen (2014)</td><td><code>AFTB</code> / bueller</td><td>22</td><td>Adreno 320</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Fire TV 2nd gen (2015)</td><td><code>AFTS</code> / sloane</td><td>22</td><td>PowerVR Rogue GX6250</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Fire TV Stick 4K 1st gen (2018)</td><td><code>AFTMM</code></td><td>25</td><td>IMG GE8300 (MT8695)</td><td>3.2</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Nebula / TCL Soundbar Fire TV Edition (2019)</td><td><code>AFTMM</code></td><td>25</td><td>IMG GE8300 (MT8695)</td><td>3.2</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Element 4K Fire TV (2017)</td><td><code>AFTRS</code></td><td>22</td><td>ARM Mali, model unstated</td><td>?</td><td>Recommended †</td><td>—</td></tr>
+<tr><td>Insignia 4K Fire TV (2018)</td><td><code>AFTJMST12</code></td><td>25</td><td>unpublished</td><td>?</td><td>Recommended †</td><td>—</td></tr>
+<tr><td>Toshiba 4K Fire TV (2018–2019)</td><td><code>AFTKMST12</code></td><td>25</td><td>unpublished</td><td>?</td><td>Recommended †</td><td>—</td></tr>
+<tr><td>Toshiba HD Fire TV (2018–2020)</td><td><code>AFTBAMR311</code></td><td>25</td><td>unpublished</td><td>?</td><td>Recommended †</td><td>—</td></tr>
+<tr><td>Insignia HD Fire TV (2018–2020)</td><td><code>AFTEAMR311</code></td><td>25</td><td>unpublished</td><td>?</td><td>Recommended †</td><td>—</td></tr>
+<tr><td>Onida HD Fire TV (2019)</td><td><code>AFTLE</code></td><td>25</td><td>unpublished</td><td>?</td><td>Recommended †</td><td>—</td></tr>
+<tr><td>Onida HD/FHD Fire TV (2020)</td><td><code>AFTTIFF55</code></td><td>25</td><td>unpublished</td><td>?</td><td>Recommended †</td><td>—</td></tr>
+<tr><td>AmazonBasics HD/FHD Fire TV (2020)</td><td><code>AFTBU001</code></td><td>25</td><td>unpublished</td><td>?</td><td>Recommended †</td><td>—</td></tr>
+<tr><th colspan="7" align="left">▸&nbsp;&nbsp;AMAZON FIRE TABLETS <i>— no Fire OS 6 generation existed</i></th></tr>
+<tr><td>Fire 7 (2017, 7th gen)</td><td><code>KFAUWI</code></td><td>22</td><td>Mali-450 MP4</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>Fire (2015, 5th gen)</td><td><code>KFFOWI</code></td><td>22</td><td>Mali-450</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>Fire HD 8 (2017, 7th gen)</td><td><code>KFDOWI</code></td><td>22</td><td>Mali-T720 MP2</td><td>3.1</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Fire HD 10 (2017, 7th gen)</td><td><code>KFSUWI</code></td><td>22</td><td>PowerVR GX6250</td><td>3.1</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Fire HD 8 (2016, 6th gen)</td><td><code>KFGIWI</code></td><td>22</td><td>Mali-T720 MP2</td><td>3.1</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Fire HD 8 (2015, 5th gen)</td><td><code>KFMEWI</code></td><td>22</td><td>unpublished</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Fire HD 10 (2015, 5th gen)</td><td><code>KFTBWI</code></td><td>22</td><td>unpublished</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Fire HDX 8.9 (2014, 4th gen)</td><td><code>KFSAWI</code> / <code>KFSAWA</code></td><td>22</td><td>Adreno 420</td><td>3.1</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Fire HD 7 (2014, 4th gen)</td><td><code>KFASWI</code></td><td>22</td><td>PowerVR G6200</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Fire HD 6 (2014, 4th gen)</td><td><code>KFARWI</code></td><td>22</td><td>PowerVR G6200</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><th colspan="7" align="left">▸&nbsp;&nbsp;NON-AMAZON <i>— Model is the SoC where the row is a class</i></th></tr>
+<tr><td>MXQ, M8S and the clone-box wave</td><td>Amlogic S805 / S812</td><td>22</td><td>Mali-450 MP2 / MP6</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>The 2016–17 TV-box generation</td><td>Amlogic S905 / S905X</td><td>22–25</td><td>Mali-450 MP3</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>Budget boxes and HDMI sticks</td><td>Rockchip RK3128 / RK3229</td><td>22–25</td><td>Mali-400 MP2</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>Later budget boxes</td><td>Rockchip RK3328</td><td>25</td><td>Mali-450 MP2</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>Sub-$100 phones, very high volume</td><td>MediaTek MT6580</td><td>22–23</td><td>Mali-400 MP2</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>Galaxy J3 2016 <code>SM-J320H</code> / <code>SM-J320F</code>, entry phones</td><td>Spreadtrum SC7731 / SC8830 / SC9830</td><td>22</td><td>Mali-400 MP2</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>White-label tablets and boxes</td><td>Allwinner A33 / A64 / H3</td><td>22–23</td><td>Mali-400 MP2 / Mali-450</td><td><b>2.0</b></td><td><b>Required</b></td><td>—</td></tr>
+<tr><td>Nexus 5</td><td>—</td><td>23</td><td>Adreno 330</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Nexus 7 (2013)</td><td>—</td><td>23</td><td>Adreno 320</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Nexus 6</td><td>—</td><td>25</td><td>Adreno 420</td><td>3.1</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Nexus 9</td><td>—</td><td>25</td><td>Tegra K1</td><td>3.1</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Galaxy S5</td><td>—</td><td>23</td><td>Adreno 330</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Galaxy Note 4 / Note Edge</td><td>—</td><td>23</td><td>Adreno 420 / Mali-T760</td><td>3.1</td><td>Recommended</td><td>—</td></tr>
+<tr><td>LG G3</td><td>—</td><td>23</td><td>Adreno 330</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Moto G 2nd / 3rd gen</td><td>—</td><td>23</td><td>Adreno 305 / 306</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Xperia Z3</td><td>—</td><td>23</td><td>Adreno 330</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>OnePlus One</td><td>—</td><td>23</td><td>Adreno 330</td><td>3.0</td><td>Recommended</td><td>—</td></tr>
+<tr><td>Razer Forge TV</td><td>—</td><td>23</td><td>Adreno 420</td><td>3.1</td><td>Recommended</td><td>—</td></tr>
+<tr><th colspan="7" align="left">▸&nbsp;&nbsp;OUT OF RANGE <i>— this build is not the answer</i></th></tr>
+<tr><td>Fire TV Stick 3rd gen / Lite, Stick 4K 2nd gen, Stick 4K Max, Cube 2nd/3rd gen, Fire TV 2/4-Series, Omni</td><td>various</td><td>28–30</td><td>various</td><td>3.2</td><td>Official</td><td>—</td></tr>
+<tr><td>Fire tablets, 2018 and later</td><td>various</td><td>28–30</td><td>various</td><td>3.1+</td><td>Official</td><td>—</td></tr>
+<tr><td>Nexus Player</td><td>—</td><td>26</td><td>PowerVR G6430</td><td>3.1</td><td>Official</td><td>—</td></tr>
+<tr><td>Xiaomi Mi Box 3</td><td>—</td><td>26</td><td>Mali-450</td><td><b>2.0</b></td><td>Official</td><td>— §</td></tr>
+<tr><td>Galaxy S4</td><td>—</td><td>21</td><td>Adreno 320 / Mali-T628</td><td>3.0</td><td>Neither</td><td>—</td></tr>
+<tr><td>Kindle Fire HDX 7 / HDX 8.9 / HD 7 (2013)</td><td><code>KFTHWI</code> / <code>KFAPWI</code> / <code>KFSOWI</code></td><td>19</td><td>Adreno 330</td><td>—</td><td>Neither</td><td>—</td></tr>
+<tr><td>Kindle Fire HD 7 / HD 8.9, Kindle Fire (2012)</td><td><code>KFTT</code> / <code>KFJWI</code> / <code>KFOT</code></td><td>15</td><td>PowerVR SGX540</td><td>—</td><td>Neither</td><td>—</td></tr>
+<tr><td>Kindle Fire (2011)</td><td>—</td><td>10</td><td>PowerVR SGX540</td><td>—</td><td>Neither</td><td>—</td></tr>
+<tr><td>Fire TV Stick 4K Select (2025), Stick HD (2026)</td><td><code>AFTCA002</code> / <code>AFTCL001</code></td><td>n/a</td><td>—</td><td>—</td><td>Neither</td><td>— ¶</td></tr>
+</tbody>
+</table>
 
 **†** Amazon has withdrawn the specs for these sets, so their GLES level is unknown. The
 verdict is `Recommended` at minimum; if the GPU turns out to be Mali-450, as it is on much
