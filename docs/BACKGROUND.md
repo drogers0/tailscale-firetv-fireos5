@@ -76,6 +76,7 @@ The two failures above generalise past that one device. The official client's fl
 **API 26**, so everything at API 22–25 is stranded regardless of GPU; GLES 2.0 only decides
 whether the old Gio releases were *ever* an option. That covers every Fire OS 5 and Fire OS 6
 device, both Fire TV and Fire tablet, plus any non-Amazon Android 5.1–7.1 hardware — and
-Mali-400/450 silicon puts a great deal of that in the same GLES 2.0 bucket as `AFTT`.
+Mali-400/450 silicon puts a great deal of that in the same GLES 2.0 bucket as `AFTT`,
+including Fire TV 3rd gen and Fire TV Cube 1st gen.
 
 **Full per-model tables: [DEVICES.md](DEVICES.md).**
