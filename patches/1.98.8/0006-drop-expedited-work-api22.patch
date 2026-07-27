@@ -1,0 +1,43 @@
+diff --git a/android/src/main/java/com/tailscale/ipn/IPNReceiver.java b/android/src/main/java/com/tailscale/ipn/IPNReceiver.java
+index 87ab33c..98ce285 100644
+--- a/android/src/main/java/com/tailscale/ipn/IPNReceiver.java
++++ b/android/src/main/java/com/tailscale/ipn/IPNReceiver.java
+@@ -39,7 +39,11 @@ public class IPNReceiver extends BroadcastReceiver {
+         if (Objects.equals(action, INTENT_CONNECT_VPN)) {
+             OneTimeWorkRequest req =
+                     new OneTimeWorkRequest.Builder(StartVPNWorker.class)
+-                            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
++                            // setExpedited removed: below API 31 WorkManager runs expedited
++                            // work as a foreground service and calls getForegroundInfo(),
++                            // which these workers do not override, so it throws
++                            // IllegalStateException("Not implemented") and kills the app.
++                            // The job is short; running it normally is fine.
+                             .addTag(WORK_CONNECT)
+                             .build();
+ 
+@@ -48,7 +52,11 @@ public class IPNReceiver extends BroadcastReceiver {
+         } else if (Objects.equals(action, INTENT_DISCONNECT_VPN)) {
+             OneTimeWorkRequest req =
+                     new OneTimeWorkRequest.Builder(StopVPNWorker.class)
+-                            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
++                            // setExpedited removed: below API 31 WorkManager runs expedited
++                            // work as a foreground service and calls getForegroundInfo(),
++                            // which these workers do not override, so it throws
++                            // IllegalStateException("Not implemented") and kills the app.
++                            // The job is short; running it normally is fine.
+                             .addTag(WORK_DISCONNECT)
+                             .build();
+ 
+@@ -67,7 +75,11 @@ public class IPNReceiver extends BroadcastReceiver {
+             OneTimeWorkRequest req =
+                     new OneTimeWorkRequest.Builder(UseExitNodeWorker.class)
+                             .setInputData(input)
+-                            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
++                            // setExpedited removed: below API 31 WorkManager runs expedited
++                            // work as a foreground service and calls getForegroundInfo(),
++                            // which these workers do not override, so it throws
++                            // IllegalStateException("Not implemented") and kills the app.
++                            // The job is short; running it normally is fine.
+                             .addTag(WORK_USE_EXIT_NODE)
+                             .build();
+ 
