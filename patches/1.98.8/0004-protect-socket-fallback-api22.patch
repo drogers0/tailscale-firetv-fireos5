@@ -1,0 +1,81 @@
+diff --git a/android/src/main/java/com/tailscale/ipn/IPNService.kt b/android/src/main/java/com/tailscale/ipn/IPNService.kt
+index 848092f..21696d6 100644
+--- a/android/src/main/java/com/tailscale/ipn/IPNService.kt
++++ b/android/src/main/java/com/tailscale/ipn/IPNService.kt
+@@ -38,6 +38,9 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+     super.onCreate()
+     // grab app to make sure it initializes
+     app = App.get()
++    // Track the live service so App.bindSocketToNetwork() can reach protect()
++    // on API < 23, where Network.bindSocket(FileDescriptor) does not exist.
++    runningInstance = this
+   }
+ 
+   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
+@@ -109,6 +112,9 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+   }
+ 
+   override fun onDestroy() {
++    if (runningInstance === this) {
++      runningInstance = null
++    }
+     close()
+     updateVpnStatus(false)
+     super.onDestroy()
+@@ -228,6 +234,11 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+   }
+ 
+   companion object {
++    // The currently running service, or null. Used only so that
++    // App.bindSocketToNetwork() can fall back to VpnService.protect(fd) on
++    // API < 23. Not a general-purpose accessor.
++    @Volatile @JvmStatic var runningInstance: IPNService? = null
++
+     const val ACTION_START_VPN = "com.tailscale.ipn.START_VPN"
+     const val ACTION_STOP_VPN = "com.tailscale.ipn.STOP_VPN"
+     const val ACTION_RESTART_VPN = "com.tailscale.ipn.RESTART_VPN"
+diff --git a/android/src/main/java/com/tailscale/ipn/App.kt b/android/src/main/java/com/tailscale/ipn/App.kt
+index 11e8b4d..d0b9ba2 100644
+--- a/android/src/main/java/com/tailscale/ipn/App.kt
++++ b/android/src/main/java/com/tailscale/ipn/App.kt
+@@ -456,13 +465,36 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
+     return getKeyStore().load(id)
+   }
+ 
++  /**
++   * On API < 23 there is no Network.bindSocket(FileDescriptor), and on this class of device
++   * the NetworkRequest callback never fires, so cachedDefaultNetwork stays null forever.
++   * Both leave Tailscale's own sockets inside its own tunnel, which breaks DERP and leaves
++   * the node unreachable.
++   *
++   * VpnService.protect(fd) (API 14) is the platform's mechanism for exactly this: it keeps a
++   * socket outside the VPN. It is weaker than bindSocket — it excludes the tunnel rather than
++   * pinning to a chosen network — but on a single-uplink device that is equivalent.
++   */
++  private fun protectSocketFallback(fd: Int, why: String): Boolean {
++    val svc = IPNService.runningInstance
++    if (svc == null) {
++      TSLog.d(TAG, "bindSocketToActiveNetwork: $why, and no running IPNService; noop")
++      return false
++    }
++    val ok = svc.protect(fd)
++    TSLog.d(TAG, "bindSocketToActiveNetwork: $why; VpnService.protect(fd=$fd) -> $ok")
++    return ok
++  }
++
+   override fun bindSocketToNetwork(fd: Int): Boolean {
++    // Network.bindSocket(FileDescriptor) is API 23+.
++    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
++      return protectSocketFallback(fd, "API ${Build.VERSION.SDK_INT} < 23")
++    }
++
+     val net =
+         NetworkChangeCallback.cachedDefaultNetwork
+-            ?: run {
+-              TSLog.d(TAG, "bindSocketToActiveNetwork: no cached default network; noop")
+-              return false
+-            }
++            ?: return protectSocketFallback(fd, "no cached default network")
+ 
+     val iface = NetworkChangeCallback.cachedDefaultInterfaceName
+ 
