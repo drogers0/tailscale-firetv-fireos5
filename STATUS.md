@@ -125,6 +125,44 @@ Confirm with `ip route show table <vpn table>` — expect ~46 `tun0` routes spli
 carved out when `allowLanAccess=true`. The table number changes between installs; find it
 via `ip rule`.
 
+## Signing
+
+Releases are signed with a durable key so published APKs form a coherent upgrade chain.
+Gradle's default debug key is generated per-machine, so without this two people building
+the same commit produce APKs that cannot upgrade over one another.
+
+```sh
+./scripts/build.sh
+./scripts/sign-apk.sh          # signs the newest APK in dist/, refreshes the .sha256
+```
+
+Signer: `CN=tailscale-firetv-fireos5`, SHA-256 `b6e56d68…53b5`.
+
+Key material lives in **GitHub repo secrets** for CI, and on disk for local builds:
+
+| Secret | Contents |
+|---|---|
+| `TS_KEYSTORE_BASE64` | base64 of the `.jks` |
+| `TS_KEYSTORE_PASSWORD` | store/key password |
+| `TS_KEY_ALIAS` | `firetv` |
+
+`sign-apk.sh` prefers those env vars when present (decoding to a temp file removed on exit)
+and falls back to `~/.keystores/tailscale-firetv-release.{jks,pass}` otherwise. Same script
+works locally and in CI.
+
+> ### ⚠️ GitHub secrets are write-only — keep the local copy
+>
+> Secrets cannot be read back out of GitHub. If the on-disk keystore is deleted, the key is
+> unrecoverable for local signing and **every future release breaks in-place upgrades**.
+> Keep `~/.keystores/tailscale-firetv-release.jks` and its password backed up somewhere
+> durable. The repo `.gitignore` excludes `*.jks`/`*.keystore`; never commit them.
+
+We re-sign the debug-built APK rather than building the `release` variant, because that
+variant enables `minifyEnabled` + `shrinkResources`, and ProGuard is a genuine risk to
+kotlinx.serialization and the gomobile JNI bindings. Re-signing ships the exact bytes we
+tested. The APK therefore stays **debuggable**, which is also what makes `run-as` log
+reading possible.
+
 ## Reading the Go-side logs
 
 Tailscale's Go logs never reach logcat. The APK is a **debug** build

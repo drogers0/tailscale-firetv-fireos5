@@ -119,6 +119,16 @@ dist/tailscale-fireos5-<ver>-minsdk22-armeabi-v7a.apk
 dist/tailscale-fireos5-<ver>-minsdk22-armeabi-v7a.apk.sha256
 ```
 
+## Signing
+
+```sh
+./scripts/sign-apk.sh        # newest APK in dist/, or pass a path
+```
+
+Uses `TS_KEYSTORE_BASE64` / `TS_KEYSTORE_PASSWORD` / `TS_KEY_ALIAS` when set (CI), else
+`~/.keystores/tailscale-firetv-release.{jks,pass}`. See STATUS.md — note that GitHub
+secrets cannot be read back, so the local keystore must be preserved.
+
 ## Install and test
 
 ```sh
