@@ -1,7 +1,8 @@
 # Building
 
 Produces `dist/tailscale-fireos5-<ver>-minsdk22-armeabi-v7a.apk` from a chosen upstream
-release, with the API floor overridden back to 22.
+release, with the API floor overridden back to 22. The trailing ABI follows what you
+targeted — `arm64-v8a`, or `universal` for a multi-ABI build.
 
 Roughly **10 minutes** cold on a fast connection; most of that is the ~1 GB Android NDK.
 Subsequent builds reuse the checkout and caches and take a couple of minutes.
@@ -79,7 +80,7 @@ Override anything via environment variables:
 |---|---|---|
 | `TS_REF` | `1.98.8-t1241b225b-gbcbaf1889` | upstream tag or commit to build |
 | `MIN_SDK` | `22` | API floor; patched into Gradle **and** gomobile |
-| `GOMOBILE_TARGET` | `android/arm` | `android` for all ABIs (slower, larger) |
+| `GOMOBILE_TARGET` | `android/arm` | `android/arm64` for arm64-only; bare `android` for all ABIs (slower, larger) |
 | `ANDROID_SDK_ROOT` | `~/Library/Android/sdk` (mac), `~/Android/Sdk` (linux) | SDK location |
 | `JAVA_HOME` | autodetected JDK 17 | |
 | `WORKDIR` | `.build` | scratch checkout, one dir per ref |
@@ -112,7 +113,8 @@ API-22 bugs listed in STATUS.md — expect `NoSuchMethodError` / `NoClassDefFoun
    the APK — `assembleFdroidDebug` or `assembleDebug` depending on whether the ref still
    has flavors — skipping the `test` task.
 8. **Verifies** with `scripts/verify-apk.py`, which hard-fails on `minSdk` too high or a
-   missing ABI. A rejected artifact is deleted rather than written to `dist/`.
+   missing ABI — the one you targeted, or `armeabi-v7a` for a multi-ABI build. A rejected
+   artifact is deleted rather than written to `dist/`.
 
 Output:
 

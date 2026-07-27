@@ -69,22 +69,14 @@ guards that rotted once they became dead code at minSdk 26.
 
 ## Device compatibility
 
-Developed and verified on:
+Developed and verified on a **Fire TV Stick 2nd gen** (`AFTT` / `tank`, Fire OS 5.2.9.5,
+API 22, `armeabi-v7a`, Mali-450 / GLES 2.0, 895 MB RAM).
 
-| | |
-|---|---|
-| Device | Fire TV Stick (2nd generation) |
-| Model / codename | `AFTT` / `tank` — retail marking **LY73PR** |
-| Fire OS | 5.2.9.5 (`288.6.8.8_user_688806320`) |
-| Android | 5.1.1, **API 22** |
-| ABI | `armeabi-v7a` (no arm64, no x86) |
-| GPU | ARM **Mali-450 MP**, `ro.opengles.version=131072` (**GLES 2.0**) |
-| Display | 1920x1080 @ 320 dpi |
-| RAM | 895 MB |
+The two failures above generalise past that one device. The official client's floor is
+**API 26**, so everything at API 22–25 is stranded regardless of GPU; GLES 2.0 only decides
+whether the old Gio releases were *ever* an option. That covers every Fire OS 5 and Fire OS 6
+device, both Fire TV and Fire tablet, plus any non-Amazon Android 5.1–7.1 hardware — and
+Mali-400/450 silicon puts a great deal of that in the same GLES 2.0 bucket as `AFTT`,
+including Fire TV 3rd gen and Fire TV Cube 1st gen.
 
-**Should also apply to** any Fire OS 5 device reporting API 22 and GLES 2.0 — Fire TV Stick
-1st gen (`AFTB`), Fire TV 1st/2nd gen (`AFTB`/`AFTS`). Untested; please open an issue with
-`scripts/device-check.sh` output if you try one.
-
-**Not needed for** Fire TV devices released after 2018 — Fire OS 6+ / Android 7+ with GLES 3
-hardware. Use the [official client](https://tailscale.com/docs/install/amazon-fire).
+**Full per-model tables: [DEVICES.md](DEVICES.md).**

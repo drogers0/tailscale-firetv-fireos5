@@ -81,7 +81,7 @@ fi
 case "$ABILIST" in
   *armeabi-v7a*) echo "  ✓ armeabi-v7a present." ;;
   *) echo "  ✗ armeabi-v7a not in abilist — the default single-ABI build won't run."
-     echo "    Rebuild with e.g. TS_ARCH=arm64 ./scripts/build.sh"
+     echo "    Rebuild with e.g. GOMOBILE_TARGET=android/arm64 ./scripts/build.sh"
      verdict=1 ;;
 esac
 
