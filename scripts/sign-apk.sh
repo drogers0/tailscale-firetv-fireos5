@@ -37,23 +37,51 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-# CI path: materialise the keystore from repo secrets into a temp file that is
-# removed on exit. Locally these are unset and the on-disk keystore is used.
-#   TS_KEYSTORE_BASE64   base64 of the .jks
-#   TS_KEYSTORE_PASSWORD store/key password
+ENCRYPTED="$REPO_ROOT/secrets/tailscale-firetv-release.jks.gpg"
+KEYCHAIN_SERVICE="tailscale-firetv-release"
+KEYCHAIN_ACCOUNT="firetv"
+
 CLEANUP_KS=""
 cleanup() { [ -n "$CLEANUP_KS" ] && rm -f "$CLEANUP_KS"; }
 trap cleanup EXIT
 
+# ---- resolve the passphrase -------------------------------------------------
+# 1. TS_KEYSTORE_PASSWORD   (CI, from GitHub secrets)
+# 2. macOS Keychain         (local default)
+# 3. local password file    (legacy)
+# 4. interactive prompt
+resolve_pass() {
+  if [ -n "${TS_KEYSTORE_PASSWORD:-}" ]; then printf '%s' "$TS_KEYSTORE_PASSWORD"; return; fi
+  if command -v security >/dev/null 2>&1; then
+    if p=$(security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null); then
+      printf '%s' "$p"; return
+    fi
+  fi
+  if [ -n "$PASSFILE" ] && [ -f "$PASSFILE" ]; then cat "$PASSFILE"; return; fi
+  read -rsp "Keystore passphrase: " p </dev/tty; echo >/dev/tty
+  printf '%s' "$p"
+}
+
+# ---- resolve the keystore ---------------------------------------------------
+# 1. TS_KEYSTORE_BASE64     (CI, from GitHub secrets)
+# 2. secrets/*.jks.gpg      (committed, encrypted — the portable path)
+# 3. plain on-disk keystore (legacy)
 if [ -n "${TS_KEYSTORE_BASE64:-}" ]; then
-  CLEANUP_KS="$(mktemp -t tsks)"
+  CLEANUP_KS="$(mktemp -t tsks)"; chmod 600 "$CLEANUP_KS"
   printf '%s' "$TS_KEYSTORE_BASE64" | base64 --decode > "$CLEANUP_KS"
-  chmod 600 "$CLEANUP_KS"
   KEYSTORE="$CLEANUP_KS"
-  info "Using keystore from TS_KEYSTORE_BASE64"
-fi
-if [ -n "${TS_KEYSTORE_PASSWORD:-}" ]; then
-  PASSFILE=""   # password comes from the environment instead
+  info "keystore: TS_KEYSTORE_BASE64 (CI secret)"
+elif [ -f "$ENCRYPTED" ]; then
+  command -v gpg >/dev/null 2>&1 || die "gpg needed to decrypt $ENCRYPTED"
+  PASS="$(resolve_pass)"
+  CLEANUP_KS="$(mktemp -t tsks)"; chmod 600 "$CLEANUP_KS"
+  printf '%s' "$PASS" | gpg --batch --quiet --passphrase-fd 0 \
+      --decrypt "$ENCRYPTED" > "$CLEANUP_KS" 2>/dev/null \
+    || die "could not decrypt $ENCRYPTED (wrong passphrase?)"
+  KEYSTORE="$CLEANUP_KS"
+  info "keystore: secrets/$(basename "$ENCRYPTED") (decrypted in memory-backed temp)"
+else
+  info "keystore: $KEYSTORE"
 fi
 
 APK="${1:-}"
@@ -67,12 +95,7 @@ fi
 APKSIGNER="$(ls "${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}"/build-tools/*/apksigner 2>/dev/null | tail -1 || true)"
 [ -n "$APKSIGNER" ] || die "apksigner not found in the Android SDK build-tools"
 
-if [ -n "${TS_KEYSTORE_PASSWORD:-}" ]; then
-  PASS="$TS_KEYSTORE_PASSWORD"
-else
-  [ -f "$PASSFILE" ] || die "no TS_KEYSTORE_PASSWORD and no password file at $PASSFILE"
-  PASS="$(cat "$PASSFILE")"
-fi
+[ -n "${PASS:-}" ] || PASS="$(resolve_pass)"
 
 info "Signing $(basename "$APK")"
 "$APKSIGNER" sign \

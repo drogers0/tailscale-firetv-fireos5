@@ -14,10 +14,12 @@ dist/
 *-before.txt
 backup/raw/
 
-# Secrets
+# Secrets — plaintext key material never goes in the repo.
+# secrets/*.gpg IS committed: encrypted, useless without the passphrase.
 *.env
 *.jks
 *.keystore
+*.pass
 local.properties
 
 # Tooling

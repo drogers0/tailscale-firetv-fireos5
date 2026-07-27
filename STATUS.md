@@ -138,24 +138,33 @@ the same commit produce APKs that cannot upgrade over one another.
 
 Signer: `CN=tailscale-firetv-fireos5`, SHA-256 `b6e56d68…53b5`.
 
-Key material lives in **GitHub repo secrets** for CI, and on disk for local builds:
+The key **lives in the repo, encrypted**: `secrets/tailscale-firetv-release.jks.gpg`
+(GPG symmetric, AES-256, SHA-512 KDF, 65M iterations). It travels with the repo and survives
+machine loss. See [secrets/README.md](secrets/README.md).
 
-| Secret | Contents |
+The passphrase is the one thing that cannot live in the repo — otherwise cloning it would be
+enough to sign as you. `sign-apk.sh` resolves it in this order:
+
+| | Source |
 |---|---|
-| `TS_KEYSTORE_BASE64` | base64 of the `.jks` |
-| `TS_KEYSTORE_PASSWORD` | store/key password |
-| `TS_KEY_ALIAS` | `firetv` |
+| 1 | `TS_KEYSTORE_PASSWORD` env var — CI, from GitHub secrets |
+| 2 | **macOS Keychain** — service `tailscale-firetv-release`, account `firetv` |
+| 3 | `~/.keystores/tailscale-firetv-release.pass` — legacy |
+| 4 | interactive prompt |
 
-`sign-apk.sh` prefers those env vars when present (decoding to a temp file removed on exit)
-and falls back to `~/.keystores/tailscale-firetv-release.{jks,pass}` otherwise. Same script
-works locally and in CI.
+The keystore itself resolves as: `TS_KEYSTORE_BASE64` (CI) → encrypted file in the repo →
+plain local `.jks`. Verified working with **no local keystore and no env vars** — decrypted
+from the repo with the Keychain passphrase.
 
-> ### ⚠️ GitHub secrets are write-only — keep the local copy
->
-> Secrets cannot be read back out of GitHub. If the on-disk keystore is deleted, the key is
-> unrecoverable for local signing and **every future release breaks in-place upgrades**.
-> Keep `~/.keystores/tailscale-firetv-release.jks` and its password backed up somewhere
-> durable. The repo `.gitignore` excludes `*.jks`/`*.keystore`; never commit them.
+GitHub secrets (`TS_KEYSTORE_BASE64`, `TS_KEYSTORE_PASSWORD`, `TS_KEY_ALIAS`) remain set for
+CI. Note they are **write-only** — you cannot read them back — which is exactly why the
+encrypted copy in the repo is the real backup.
+
+Store the passphrase on a new machine with:
+
+```sh
+security add-generic-password -U -s tailscale-firetv-release -a firetv -w
+```
 
 We re-sign the debug-built APK rather than building the `release` variant, because that
 variant enables `minifyEnabled` + `shrinkResources`, and ProGuard is a genuine risk to
