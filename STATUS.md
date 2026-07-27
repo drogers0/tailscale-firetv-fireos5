@@ -1,183 +1,149 @@
-# Status — where this stands, and how to resume
+# Status — WORKING
 
-Last updated 2026-07-26. Work is **paused mid-investigation**, not abandoned.
+Last updated 2026-07-26.
 
-Read this first, then [FINDINGS.md](FINDINGS.md) for the evidence behind each claim.
+Tailscale **1.98.8** (current stable) runs on **Fire OS 5 / Android 5.1 / API 22** with
+seven patches, and **routes traffic through an exit node**.
 
 ---
 
-## One-line summary
+## Verified end-to-end
 
-Tailscale **1.98.8** (current stable) runs on Fire OS 5 / API 22 with **four patches**.
-It installs, renders, logs in, brings up a tunnel, connects to DERP, and shows **online**
-on the tailnet with no health warnings. One bug remains: **the peer list renders empty**,
-so the exit-node picker has nothing to choose from.
-
-### ✅ Socket binding — FIXED (patch 0004)
-
-`bindSocketToNetwork()` failed on API 22 for two reasons: the `NetworkRequest` callback
-never fires (so `cachedDefaultNetwork` was permanently null), and
-`Network.bindSocket(FileDescriptor)` is API 23 anyway. Fixed by falling back to
-`VpnService.protect(fd)` (API 14), the platform's own mechanism for keeping a VPN app's
-sockets outside its tunnel. Confirmed on hardware:
-
-```
-bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=78) -> true
-derphttp.Client.Recv: connecting to derp-16 (mia)
-derp-16 connected; connGen=1     derp=16 derpdist=16v4:72ms
-health(warnable=no-derp-connection): ok      health: Health updated: null
-```
-
-This resolved three of the four symptoms: the relay warning, the device showing offline,
-and the health icon.
-
-## What works
+On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
 
 | | |
 |---|---|
-| Build at `MIN_SDK=22` | ✅ `TS_REF=1.98.8-t1241b225b-gbcbaf1889 MIN_SDK=22 ./scripts/build.sh` |
-| `gomobile bind -androidapi 22` | ✅ Go/native layer compiles clean on current code |
-| Gradle `assembleDebug` at minSdk 22 | ✅ no manifest-merger rejection |
+| Builds at `MIN_SDK=22` | ✅ `gomobile bind -androidapi 22` included |
 | Installs on API 22 | ✅ versionCode 468, targetSdk 35 |
-| Compose UI renders on GLES 2.0 | ✅ the original blocker, solved |
-| Login | ✅ completes, profile persists |
-| Tunnel comes up | ✅ `tun0`, `100.64.0.10`, `fd7a:115c:a1e0::d636:597b` |
-| Settings / exit-node screens | ✅ render; prefs writes succeed |
-| **DERP relay** | ✅ derp-16 (mia) connected, ~72 ms |
-| **Online on the tailnet** | ✅ no "offline" marker, health warnings clear |
-| **Peer list / exit-node choices** | ❌ **open — renders empty** |
+| Compose UI on GLES 2.0 | ✅ |
+| Login | ✅ persists across restarts |
+| Tunnel | ✅ `tun0`, `100.64.0.10` |
+| DERP relay | ✅ `derp-16 (mia)`, ~72 ms |
+| Online to control plane | ✅ no "offline" marker |
+| Health warnings | ✅ clear |
+| Peer list | ✅ `Peers=6`, grouped by user |
+| **Exit node** | ✅ **`exit-node-host.othernet.ts.net`** |
+| **Traffic through exit node** | ✅ **1 MB download → 1,113,884 bytes over `tun0`** |
 
-## The open blocker: peer list renders empty
+> **Measuring exit-node routing:** public egress IP is useless here — the exit node's owner
+> shares the household connection, so stick and laptop report the same IP. Use the byte
+> counters instead. Without an exit node, public-internet traffic never traverses `tun0`.
+>
+> ```sh
+> adb shell cat /sys/class/net/tun0/statistics/rx_bytes
+> adb shell curl -s -o /dev/null -w '%{size_download}\n' http://speedtest.tele2.net/1MB.zip
+> adb shell cat /sys/class/net/tun0/statistics/rx_bytes
+> ```
 
-**Corrected assumption.** The empty peer list was previously assumed to be downstream of
-the socket-binding fault. It is not — it survives with DERP connected and the node online,
-so it is an independent bug.
-
-The Go layer has the peers. Proven by the Go-side log, *after* the fix:
-
-```
-wgcfg: skipped unselected exit nodes from 1 nodes: exit-node-host (nXXXXXXXXXXXCNTRL)
-wgcfg: skipped expired peers from 1 nodes: desktop-a (nYYYYYYYYYYYCNTRL)
-```
-
-("skipped unselected" is normal — an exit node you have not chosen.) But the UI shows no
-devices and the exit-node picker lists none.
-
-### Where to look
-
-`PeerCategorizer.regenerateGroupedPeers()` in `ui/util/PeerHelper.kt`:
-
-```kotlin
-fun regenerateGroupedPeers(netmap: Netmap.NetworkMap) {
-    val peers: List<Tailcfg.Node> = netmap.Peers ?: return   // ← silent bail
-```
-
-If the Kotlin-side `netmap.Peers` is null, every peer-derived list is empty with **no
-exception** — which matches: logcat shows no `kotlinx.serialization` errors at all.
-
-Prime suspect: the Go→Kotlin netmap JSON bridge. `Notifier` deserialises the netmap into
-`Netmap.NetworkMap`; if `Peers` fails to populate (field-name mismatch, or the notify mask
-not requesting peers), everything downstream is empty and silent.
-
-Note the ordering seen in logs — `ExitNodePickerViewModel: Created` at `00:14:45`, netmap
-arriving `00:14:49` — so also worth ruling out a flow-collection race where the UI never
-recomposes on a late netmap.
-
-### Next steps
-
-1. Add a temporary `TSLog.d` in `regenerateGroupedPeers` logging `netmap.Peers?.size` and
-   whether `netmap` itself is null. One rebuild answers whether it is a null-Peers problem
-   or a never-called problem.
-2. If `Peers` is null: dump the raw notify JSON at the `Notifier` boundary and compare
-   against `Netmap.NetworkMap`'s `@Serializable` fields.
-3. If `regenerateGroupedPeers` is never called: the netmap flow is not reaching the UI —
-   look at `Notifier.netmap` collection and the notify mask.
-
-## Reading the Go-side logs — the key technique
-
-Tailscale's Go logs never reach logcat. Because we build a **debug** APK
-(`android:debuggable=true`), `run-as` reaches the app's private data:
+## Build
 
 ```sh
-adb shell run-as com.tailscale.ipn ls -la files
-adb shell run-as com.tailscale.ipn cat files/ipn.log..log1.txt
+TS_REF=1.98.8-t1241b225b-gbcbaf1889 MIN_SDK=22 ./scripts/build.sh
 ```
 
-`ipn.log..log{1,2}.txt` are JSON-per-line logtail records and rotate quickly — pull them
-promptly after reproducing. This is the only way to see netmap, DERP, wgcfg and
-`bindSocketToNetwork` activity. Kotlin-side crashes still go to logcat.
+~12 s incremental, a few minutes cold. Patches apply automatically; the build hard-fails
+if any does not.
 
-## Patches (all in `patches/1.98.8/`)
+## The seven patches
 
-Applied automatically by `build.sh`; it hard-fails if one does not apply.
-
-| Patch | Fixes | Call sites |
+| # | Fixes | API |
 |---|---|---|
-| `0001-guard-NotificationChannel-api26` | `NotificationChannel` is API 26 | 1 |
-| `0002-guard-QuickToggleService-api24` | `QuickToggleService : TileService` is API 24 | 2 |
-| `0003-guard-foreground-service-api26` | `getForegroundService` / `startForegroundService` | 2 |
-| `0004-protect-socket-fallback-api22` | `Network.bindSocket` is API 23 → `VpnService.protect(fd)` | 1 + service instance tracking |
+| 0001 | `NotificationChannel`, unguarded in `App.onCreate()` | 26 |
+| 0002 | `QuickToggleService : TileService`, 2 call sites | 24 |
+| 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 |
+| 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 |
+| 0005 | netmap decode: `decodeFromString`, not `decodeFromStream` | — |
+| 0006 | drop `setExpedited` from `IPNReceiver` work requests | 31 |
+| 0007 | `coreLibraryDesugaring` for `java.time` | 26 |
 
-`0001` must keep `notificationManager = NotificationManagerCompat.from(this)` **outside**
-the guard — it is a `lateinit` that `notifyStatus()` needs, and guarding it too yields
-`UninitializedPropertyAccessException`.
+Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
+these are that, **except 0005** — which is not API-related at all.
 
-## Known-broken paths (documented, not fixed)
+### 0005 is the interesting one
 
-**`USE_EXIT_NODE` broadcast.** The receiver is exported and looked like a way to set an
-exit node without the UI:
+```
+IllegalArgumentException: Bad position (limit 16257): -122
+```
+
+`decodeFromStream` reads through a ~16 KB buffer and corrupts a multi-byte UTF-8 sequence
+straddling the boundary. Only the netmap notification is large enough to reach it (28 KB
+here), and only when a non-ASCII character lands on the seam — in this case a device named
+with a curly apostrophe. State and Prefs notifications are small and always decoded fine,
+so **peers silently never arrived while everything else worked**. The exception escaped the
+Go callback and the entire notification was dropped, with no error anywhere.
+
+Upstream is exposed to this too, given a large enough netmap with non-ASCII at the wrong
+offset. It is luck, not API level.
+
+### 0004 — the connectivity fix
+
+`bindSocketToNetwork()` failed two ways on API 22: the `NetworkRequest` callback never
+fires (`cachedDefaultNetwork` permanently null), and `Network.bindSocket(FileDescriptor)`
+is API 23 regardless — a `NoSuchMethodError`, which the surrounding `catch (Exception)`
+would not have caught. Fixed with `VpnService.protect(fd)` (API 14), the platform's own
+mechanism for keeping a VPN app's sockets outside its tunnel. Upstream never needs it
+because `bindSocket` is strictly better at API 23+.
+
+## Setting an exit node
+
+The UI picker works. To do it from a shell:
 
 ```sh
 adb shell am broadcast -a com.tailscale.ipn.USE_EXIT_NODE \
-  -n com.tailscale.ipn/.IPNReceiver --es exitNode 'exit-node-host' --ez allowLanAccess true
+  -n com.tailscale.ipn/.IPNReceiver \
+  --es exitNode 'exit-node-host.othernet.ts.net' --ez allowLanAccess true
 ```
 
-It crashes on API 22, independently of everything above:
+The name must match `displayName` (`ComputedName ?: Name`) **exactly** — for a shared node
+that is the full FQDN, not the short hostname. A mismatch fails silently apart from a
+notification.
 
+Routes only take effect once the tunnel is re-established, so reconnect afterwards:
+
+```sh
+adb shell am broadcast -a com.tailscale.ipn.DISCONNECT_VPN -n com.tailscale.ipn/.IPNReceiver
+adb shell am broadcast -a com.tailscale.ipn.CONNECT_VPN    -n com.tailscale.ipn/.IPNReceiver
 ```
-java.lang.IllegalStateException: Not implemented
-    at androidx.work.CoroutineWorker.getForegroundInfo$suspendImpl(CoroutineWorker.kt:100)
+
+Confirm with `ip route show table <vpn table>` — expect ~46 `tun0` routes splitting
+`0.0.0.0/0` (`0.0.0.0/5`, `8.0.0.0/7`, `32.0.0.0/3`, `64.0.0.0/2`, …) with the local LAN
+carved out when `allowLanAccess=true`. The table number changes between installs; find it
+via `ip rule`.
+
+## Reading the Go-side logs
+
+Tailscale's Go logs never reach logcat. The APK is a **debug** build
+(`android:debuggable=true`), so:
+
+```sh
+adb shell run-as com.tailscale.ipn cat files/ipn.log..log1.txt
 ```
 
-`UseExitNodeWorker` is enqueued as **expedited** work. Below API 31 WorkManager runs
-expedited jobs as a foreground service and calls `getForegroundInfo()`, which the worker
-does not override. A fourth patch (drop `setExpedited`, or override `getForegroundInfo`)
-would fix the crash — but the worker would still fail, because it needs peers.
-
-## If resuming — next steps in order
-
-1. **Instrument `regenerateGroupedPeers`** — see "The open blocker" above. One rebuild
-   distinguishes null-`Peers` from never-called.
-2. Depending on the answer, chase the notify JSON bridge or the flow collection.
-3. Optional: patch 0005 for the `USE_EXIT_NODE` worker crash, if bypassing the UI is still
-   wanted once the picker works.
-4. Optional: fix `NetworkChangeCallback` so a real network gets cached — `protect()` works
-   but pins to nothing, which is weaker than `bindSocket` on a multi-uplink device.
-5. `TS_DEBUG_TLS_DIAL` remains untried. The system CA store cannot validate DERP's chain
-   (`tls=20`; chain now ends at ISRG Root X2 / Root YE), but Tailscale bakes X1+X2 in and
-   the fallback is compiled in, so this is believed **not** to be the cause. Unverified at
-   runtime — worth ruling out if binding turns out to be a red herring.
+JSON-per-line logtail records; they rotate fast, so pull promptly. This is the only way to
+see netmap, DERP, `wgcfg` and socket-binding activity. Kotlin crashes still go to logcat.
 
 ## Gotcha: poison-pill work items
 
-The `USE_EXIT_NODE` broadcast persists a WorkManager job that crashes the app on **every**
-start (`CoroutineWorker.getForegroundInfo: Not implemented`). Clear it without losing the
-login:
+A failed `USE_EXIT_NODE` broadcast (pre-0006) persists a WorkManager job that crashes the
+app on **every** start. Clear it without losing the login:
 
 ```sh
 adb shell run-as com.tailscale.ipn rm -f databases/androidx.work.workdb*
 ```
 
-`files/profile-data` holds the Tailscale login and is untouched by this.
-
-## Fallback that needs no code
-
-Run Tailscale **upstream of the stick** — a travel router or home router as the exit-node
-client, with the Fire Stick as an ordinary Wi-Fi client. Gets exit-node routing on the TV
-with a maintained client and no patched fork.
+`files/profile-data` holds the login and is untouched.
 
 ## Device under test
 
 Fire TV Stick 2nd gen — `AFTT` / `tank`, retail **LY73PR**, Fire OS 5.2.9.5, Android 5.1.1
-(API 22), armeabi-v7a, Mali-450 (GLES 2.0), 1920x1080 @ 320dpi, 895 MB RAM.
-Reached at `192.168.1.50:5555` over adb.
+(API 22), armeabi-v7a, Mali-450 (GLES 2.0), 1920x1080 @ 320 dpi, 895 MB RAM.
+
+## Possible follow-ups
+
+Everything needed works. Optional polish:
+
+1. `NetworkChangeCallback` never fires on API 22, so `protect()` pins to nothing. Equivalent
+   on a single-uplink device; would matter on multi-uplink.
+2. Patch 0005 is arguably worth reporting upstream — the `decodeFromStream` UTF-8 boundary
+   bug is not API-22-specific.
+3. Launch is slow, 5-7 s to first frame, on this hardware.

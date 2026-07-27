@@ -95,32 +95,25 @@ hardware — use the [official Tailscale client](https://tailscale.com/docs/inst
 
 ## Status
 
-> **⚠️ Not yet usable. Paused mid-investigation — see [STATUS.md](STATUS.md).**
-
-Tested on a Fire TV Stick 2nd gen (AFTT), Fire OS 5.2.9.5. Current target is **1.98.8**
-(current stable) with three patches:
+**Working.** Verified on a Fire TV Stick 2nd gen (AFTT), Fire OS 5.2.9.5 — current-stable
+Tailscale **1.98.8** with seven patches, routing traffic through an exit node.
 
 | | |
 |---|---|
-| Builds at minSdk 22 | ✅ including `gomobile bind -androidapi 22` |
-| Installs on API 22 | ✅ versionCode 468, targetSdk 35 |
-| **Compose UI renders on GLES 2.0** | ✅ the original blocker, solved |
-| Login | ✅ completes and persists |
-| Tunnel comes up | ✅ `tun0` with a tailnet IP |
-| **Stays reachable on the tailnet** | ❌ **open blocker** |
+| Builds at minSdk 22 | ✅ incl. `gomobile bind -androidapi 22` |
+| Compose UI on GLES 2.0 | ✅ the original blocker |
+| Login / tunnel / DERP | ✅ `derp-16 (mia)`, ~72 ms |
+| Online, health clear | ✅ |
+| Peer list | ✅ |
+| **Exit node routing** | ✅ 1 MB download → **1,113,884 bytes over `tun0`** |
 
-The remaining fault is `IPNService.bindSocketToNetwork()` failing on Android 5.1 — no
-default network is ever cached, so Tailscale's own sockets go unbound. That single fault
-causes the relay warning, the device showing offline, the empty peer list, and the empty
-exit-node picker. Details and resume steps in [STATUS.md](STATUS.md).
+See [STATUS.md](STATUS.md) for the patch-by-patch breakdown, how to set an exit node from
+a shell, and how to read the Go-side logs.
 
-> **Older releases are superseded.** [`1.59.53-fireos5-rc1`](../../releases/tag/1.59.53-fireos5-rc1)
-> renders but its screens are stubs ("Future Home of Settings"), and
-> [`1.64.0-fireos5-rc2`](../../releases/tag/1.64.0-fireos5-rc2) has a complete UI but an
-> older Go core. Both are retained as evidence, not for use.
-
-Everything ships as a **release candidate**. Launch is slow on this hardware — 5-7 s to
-first frame.
+> Older releases are superseded and retained only as evidence:
+> [RC1](../../releases/tag/1.59.53-fireos5-rc1) renders but its screens are stubs;
+> [RC2](../../releases/tag/1.64.0-fireos5-rc2) has a complete UI but an older Go core and
+> the connectivity bugs.
 
 ## Quick start
 
