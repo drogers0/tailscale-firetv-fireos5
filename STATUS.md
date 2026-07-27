@@ -26,9 +26,10 @@ On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
 | **Traffic through exit node** | ✅ **1 MB download → 1,113,884 bytes over `tun0`** |
 | Survives reboot | ❌ VPN does not auto-start — see below |
 
-> **Measuring exit-node routing:** public egress IP is useless here — the exit node's owner
-> shares the household connection, so stick and laptop report the same IP. Use the byte
-> counters instead. Without an exit node, public-internet traffic never traverses `tun0`.
+> **Measuring exit-node routing:** public egress IP is an unreliable check — if the exit
+> node sits behind the same internet connection, both ends report the same address. Use the
+> tunnel byte counters instead. Without an exit node selected, public-internet traffic never
+> traverses `tun0` at all.
 >
 > ```sh
 > adb shell cat /sys/class/net/tun0/statistics/rx_bytes

@@ -88,12 +88,3 @@ Developed and verified on:
 
 **Not needed for** Fire TV devices released after 2018 — Fire OS 6+ / Android 7+ with GLES 3
 hardware. Use the [official client](https://tailscale.com/docs/install/amazon-fire).
-
-## Related: custom launchers do not work on this firmware
-
-Not Tailscale-related, but discovered alongside and worth recording. Amazon blocked custom
-launchers in **Fire OS 5.2.8.7**; this device is on 5.2.9.5. FTVLaunchX installs and accepts
-`WRITE_SECURE_SETTINGS`, but `secure/accessibility_enabled` silently reverts to `0`, so its
-accessibility service never binds and the Home button is never redirected. Confirmed not a
-permissions problem — a control write to an unrelated secure key succeeds. AppStarter still
-works when launched from the apps row.

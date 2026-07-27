@@ -61,16 +61,6 @@ This is why "just use an older APK" fails, and why it's easy to misdiagnose: the
 installs fine, the network layer works, and the logs look healthy right up until the first
 frame.
 
-### Not caused by Tailscale
-
-Two things happened alongside it that are unrelated:
-
-- `com.amazon.ftv.screensaver` threw `java.lang.RuntimeException: Package manager has died`
-- Wi-Fi dropped (66% packet loss), killing the adb connection
-
-The device did **not** reboot — uptime advanced 5735s → 6128s, consistent with elapsed
-time only.
-
 ## 4. The minSdk timeline is non-monotonic
 
 Traced through every commit touching `android/build.gradle` in `tailscale/tailscale-android`:
