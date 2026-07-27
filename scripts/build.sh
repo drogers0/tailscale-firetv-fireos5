@@ -3,22 +3,22 @@
 # Build Tailscale for Fire OS 5 / Android 5.1 (API 22) on OpenGL ES 2.0 hardware.
 #
 # Upstream declares minSdkVersion 26 from 2024-03-13 onward, but that bump was a one-line
-# decision, not a dependency change (see FINDINGS.md). This script checks out a chosen
-# upstream ref and overrides the API floor in both places it is enforced:
+# decision, not a dependency change (see docs/FINDINGS.md). This script checks out a
+# chosen upstream ref and overrides the API floor in both places it is enforced:
 #
 #   1. android/build.gradle   -> minSdkVersion
 #   2. gomobile bind          -> -androidapi   (the native AAR has its own gate)
 #
 # Overriding only the first produces an APK that installs and then dies in native code.
 #
-# See BUILD.md for prerequisites and TS_REF choices.
+# See docs/BUILD.md for prerequisites and TS_REF choices.
 
 set -euo pipefail
 
 # ---- pinned inputs ----------------------------------------------------------
 TS_REPO="https://github.com/tailscale/tailscale-android.git"
 # 1.64.0 — earliest release with a complete Compose UI (settings, exit-node picker).
-# The earlier 3926cf4b56 renders but its screens are stubs; see FINDINGS.md.
+# The earlier 3926cf4b56 renders but its screens are stubs; see docs/FINDINGS.md.
 TS_REF="${TS_REF:-1.64.0-t78dc8622d-gfd2ca6fa940}"
 NDK_VERSION="${NDK_VERSION:-23.1.7779620}"
 
@@ -53,10 +53,10 @@ if [ -z "${JAVA_HOME:-}" ]; then
     JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
   fi
 fi
-[ -n "${JAVA_HOME:-}" ] || die "JDK 17 not found. Set JAVA_HOME. See BUILD.md."
+[ -n "${JAVA_HOME:-}" ] || die "JDK 17 not found. Set JAVA_HOME. See docs/BUILD.md."
 export JAVA_HOME
 JAVA_MAJOR="$("$JAVA_HOME/bin/java" -version 2>&1 | head -1 | sed -E 's/.*"([0-9]+).*/\1/')"
-[ "$JAVA_MAJOR" = "17" ] || die "JAVA_HOME is JDK $JAVA_MAJOR; AGP needs JDK 17. See BUILD.md."
+[ "$JAVA_MAJOR" = "17" ] || die "JAVA_HOME is JDK $JAVA_MAJOR; AGP needs JDK 17. See docs/BUILD.md."
 info "JDK 17: $JAVA_HOME"
 
 if [ -z "${ANDROID_SDK_ROOT:-}" ]; then

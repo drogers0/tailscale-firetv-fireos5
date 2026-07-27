@@ -21,7 +21,7 @@ Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5:
 | Online to control plane, health clear | ✅ |
 | Peer list | ✅ |
 | **Exit-node routing** | ✅ 1 MB download → **1,113,884 bytes over `tun0`** |
-| Auto-start after reboot | ❌ open the app once; see [STATUS.md](STATUS.md) |
+| Auto-start after reboot | ❌ open the app once; see [STATUS.md](docs/STATUS.md) |
 
 ## Quick start
 
@@ -30,7 +30,7 @@ git clone git@github.com:drogers0/tailscale-firetv-fireos5.git
 cd tailscale-firetv-fireos5
 
 ./scripts/device-check.sh <fire-stick-ip>:5555   # confirm API 22 + GLES 2.0
-./scripts/build.sh                               # see BUILD.md for prerequisites
+./scripts/build.sh                               # see docs/BUILD.md for prerequisites
 adb install -r dist/tailscale-fireos5-*.apk
 ```
 
@@ -41,10 +41,10 @@ against the published checksum.
 
 | | |
 |---|---|
-| [STATUS.md](STATUS.md) | what works, the seven patches, verification method, gotchas |
-| [BUILD.md](BUILD.md) | prerequisites, build, troubleshooting, reproducibility |
+| [docs/STATUS.md](docs/STATUS.md) | what works, the seven patches, verification method, gotchas |
+| [docs/BUILD.md](docs/BUILD.md) | prerequisites, build, troubleshooting, reproducibility |
 | [docs/BACKGROUND.md](docs/BACKGROUND.md) | why the gap exists, why 1.98.8, device compatibility |
-| [FINDINGS.md](FINDINGS.md) | investigation record, including disproven theories |
+| [docs/FINDINGS.md](docs/FINDINGS.md) | investigation record, including disproven theories |
 
 ## Legal
 

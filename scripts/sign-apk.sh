@@ -43,8 +43,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-# Intentionally NOT stored in this repo — see STATUS.md. Set TS_KEYSTORE_ENCRYPTED to
-# an out-of-tree gpg-encrypted keystore if you prefer that to a plain .jks on disk.
+# Intentionally NOT stored in this repo — see docs/STATUS.md. Set TS_KEYSTORE_ENCRYPTED
+# to an out-of-tree gpg-encrypted keystore if you prefer that to a plain .jks on disk.
 ENCRYPTED="${TS_KEYSTORE_ENCRYPTED:-}"
 KEYCHAIN_SERVICE="tailscale-firetv-release"
 KEYCHAIN_ACCOUNT="firetv"
