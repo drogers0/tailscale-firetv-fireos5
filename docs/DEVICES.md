@@ -52,9 +52,6 @@ ABI list and `ro.opengles.version`, and gives a verdict.
 - 🟢 **Official** — API 26+. Use the [official client](https://tailscale.com/docs/install/android).
 - ⚫ **Neither** — below the API 22 floor, or not Android. Nothing here helps.
 
-The colour describes the device's situation, not the software: red means the official client
-cannot help you at all, green means it can.
-
 **Tested** — ✅ verified on hardware, — untested.
 
 <table>
@@ -142,20 +139,5 @@ client installs and Compose renders on it. GLES 2.0 alone was never the barrier.
 > update — still inside API 22–25 either way, but check the device, not the marketing name.
 > Amlogic **S912** is likewise the exception in its family: Mali-T820, GLES 3.2.
 
-## Verified
-
-The one ✅ row above, in full:
-
-| | |
-|---|---|
-| Device | Fire TV Stick (2nd generation) |
-| Model / codename | `AFTT` / `tank` — retail marking **LY73PR** |
-| Fire OS | 5.2.9.5 (`288.6.8.8_user_688806320`) |
-| Android | 5.1.1, **API 22** |
-| ABI | `armeabi-v7a` (no arm64, no x86) |
-| GPU | ARM **Mali-450 MP**, `ro.opengles.version=131072` (**GLES 2.0**) |
-| Display | 1920x1080 @ 320 dpi |
-| RAM | 895 MB |
-
-Everything else is **untested**. Please open an issue with `scripts/device-check.sh` output
-if you try one.
+Everything outside the ✅ row is **untested**. Please open an issue with
+`scripts/device-check.sh` output if you try one.
