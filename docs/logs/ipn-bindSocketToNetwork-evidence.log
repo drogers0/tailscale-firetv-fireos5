@@ -1,0 +1,47 @@
+{"logtail":{"client_time":"2026-07-27T00:14:42.43233301Z","proc_id":3506542926,"proc_seq":1631},"metrics":"I2806I2a06I2c08I3806I3c06I3e06I4206I4406I7802I7a02I7e02I800102I840102","text":"VpnPermissions: vpnIntent=null"}
+{"logtail":{"client_time":"2026-07-27T00:14:42.505334394Z","proc_id":3506542926,"proc_seq":1632},"text":"LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:42.505808625Z","proc_id":3506542926,"proc_seq":1633},"text":"localapi: [PATCH] /localapi/v0/prefs\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:42.511285625Z","proc_id":3506542926,"proc_seq":1634},"text":"VpnPermissions: vpnIntent=null"}
+{"logtail":{"client_time":"2026-07-27T00:14:42.536146163Z","proc_id":3506542926,"proc_seq":1635},"text":"LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:42.537609856Z","proc_id":3506542926,"proc_seq":1636},"text":"localapi: [PATCH] /localapi/v0/prefs\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:45.304956394Z","proc_id":3506542926,"proc_seq":1637},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/ on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:45.305246241Z","proc_id":3506542926,"proc_seq":1638},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/current on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:45.307430471Z","proc_id":3506542926,"proc_seq":1639},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/ on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:45.317192856Z","proc_id":3506542926,"proc_seq":1640},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/current on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:45.318908471Z","proc_id":3506542926,"proc_seq":1641},"text":"ExitNodePickerViewModel: Created"}
+{"logtail":{"client_time":"2026-07-27T00:14:48.903120472Z","proc_id":3506542926,"proc_seq":1642},"text":"LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:48.904428548Z","proc_id":3506542926,"proc_seq":1643},"text":"localapi: [PATCH] /localapi/v0/prefs\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:48.907179395Z","proc_id":3506542926,"proc_seq":1644},"text":"7.6M/98.8M EditPrefs: MaskedPrefs{ExitNodeAllowLANAccess=true}\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:49.10147601Z","proc_id":3506542926,"proc_seq":1645},"v":1,"text":"7.6M/98.8M wgcfg: skipped unselected exit nodes from 1 nodes: exit-node-host (nXXXXXXXXXXXCNTRL)\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:49.101891933Z","proc_id":3506542926,"proc_seq":1646},"v":1,"text":"7.6M/98.8M wgcfg: skipped expired peers from 1 nodes: desktop-a (nYYYYYYYYYYYCNTRL)\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:49.105388702Z","proc_id":3506542926,"proc_seq":1647},"v":1,"text":"7.6M/98.8M wgengine: Reconfig done\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:49.105729625Z","proc_id":3506542926,"proc_seq":1648},"v":1,"text":"7.6M/98.8M authReconfig: ra=true dns=true 0x02: <nil>\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:49.10600601Z","proc_id":3506542926,"proc_seq":1649},"v":1,"text":"7.6M/98.8M initPeerAPIListener: entered\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:49.106902779Z","proc_id":3506542926,"proc_seq":1650},"v":1,"text":"7.6M/98.8M initPeerAPIListener: 2 netmap addresses match existing listeners\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:50.878668241Z","proc_id":3506542926,"proc_seq":1651},"text":"LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:50.879610241Z","proc_id":3506542926,"proc_seq":1652},"text":"localapi: [PATCH] /localapi/v0/prefs\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:50.881183702Z","proc_id":3506542926,"proc_seq":1653},"text":"7.6M/98.8M EditPrefs: MaskedPrefs{ExitNodeAllowLANAccess=false}\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:50.991769164Z","proc_id":3506542926,"proc_seq":1654},"v":1,"text":"7.6M/98.8M wgcfg: skipped unselected exit nodes from 1 nodes: exit-node-host (nXXXXXXXXXXXCNTRL)\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:50.992210241Z","proc_id":3506542926,"proc_seq":1655},"v":1,"text":"7.6M/98.8M wgcfg: skipped expired peers from 1 nodes: desktop-a (nYYYYYYYYYYYCNTRL)\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:50.993385395Z","proc_id":3506542926,"proc_seq":1656},"v":1,"text":"7.6M/98.8M wgengine: Reconfig done\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:50.993692164Z","proc_id":3506542926,"proc_seq":1657},"v":1,"text":"7.6M/98.8M authReconfig: ra=true dns=true 0x02: <nil>\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:50.993917626Z","proc_id":3506542926,"proc_seq":1658},"v":1,"text":"7.6M/98.8M initPeerAPIListener: entered\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:50.994153087Z","proc_id":3506542926,"proc_seq":1659},"v":1,"text":"7.6M/98.8M initPeerAPIListener: 2 netmap addresses match existing listeners\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:52.809364164Z","proc_id":3506542926,"proc_seq":1660},"text":"VpnPermissions: vpnIntent=null"}
+{"logtail":{"client_time":"2026-07-27T00:14:52.899399087Z","proc_id":3506542926,"proc_seq":1661},"text":"LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:52.899672703Z","proc_id":3506542926,"proc_seq":1662},"text":"localapi: [PATCH] /localapi/v0/prefs\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:52.901276087Z","proc_id":3506542926,"proc_seq":1663},"text":"VpnPermissions: vpnIntent=null"}
+{"logtail":{"client_time":"2026-07-27T00:14:52.931172779Z","proc_id":3506542926,"proc_seq":1664},"text":"LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:52.931553626Z","proc_id":3506542926,"proc_seq":1665},"text":"localapi: [PATCH] /localapi/v0/prefs\n"}
+{"logtail":{"client_time":"2026-07-27T00:14:56.969983395Z","proc_id":3506542926,"proc_seq":1666},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/ on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:56.970274395Z","proc_id":3506542926,"proc_seq":1667},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/current on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:56.971195934Z","proc_id":3506542926,"proc_seq":1668},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/ on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:56.972412318Z","proc_id":3506542926,"proc_seq":1669},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/current on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:14:56.97315501Z","proc_id":3506542926,"proc_seq":1670},"text":"SettingsViewModel: Created"}
+{"logtail":{"client_time":"2026-07-27T00:14:56.975459087Z","proc_id":3506542926,"proc_seq":1671},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/tka/status on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:15:09.311756319Z","proc_id":3506542926,"proc_seq":1672},"metrics":"I1802I4002","text":"VpnPermissions: vpnIntent=null"}
+{"logtail":{"client_time":"2026-07-27T00:15:09.39056178Z","proc_id":3506542926,"proc_seq":1673},"text":"LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:15:09.391384165Z","proc_id":3506542926,"proc_seq":1674},"text":"localapi: [PATCH] /localapi/v0/prefs\n"}
+{"logtail":{"client_time":"2026-07-27T00:15:09.398239704Z","proc_id":3506542926,"proc_seq":1675},"text":"VpnPermissions: vpnIntent=null"}
+{"logtail":{"client_time":"2026-07-27T00:15:09.42612378Z","proc_id":3506542926,"proc_seq":1676},"text":"LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs on app libtailscale.Libtailscale$proxyApplication@3ef8f727"}
+{"logtail":{"client_time":"2026-07-27T00:15:09.42712255Z","proc_id":3506542926,"proc_seq":1677},"text":"localapi: [PATCH] /localapi/v0/prefs\n"}

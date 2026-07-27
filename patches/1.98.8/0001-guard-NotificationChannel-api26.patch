@@ -1,0 +1,23 @@
+diff --git a/android/src/main/java/com/tailscale/ipn/App.kt b/android/src/main/java/com/tailscale/ipn/App.kt
+index 11e8b4d..5a8bb56 100644
+--- a/android/src/main/java/com/tailscale/ipn/App.kt
++++ b/android/src/main/java/com/tailscale/ipn/App.kt
+@@ -630,9 +650,17 @@ open class UninitializedApp : Application() {
+   }
+ 
+   fun createNotificationChannel(id: String, name: String, description: String, importance: Int) {
++    // This must run on every API level: notificationManager is a lateinit that
++    // notifyStatus() depends on, and this is its only initialisation site.
++    // Guarding it too returns UninitializedPropertyAccessException instead.
++    notificationManager = NotificationManagerCompat.from(this)
++    // NotificationChannel itself is API 26+. Below that, channels do not exist
++    // and the platform ignores the channel id, so skipping is a safe no-op.
++    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
++      return
++    }
+     val channel = NotificationChannel(id, name, importance)
+     channel.description = description
+-    notificationManager = NotificationManagerCompat.from(this)
+     notificationManager.createNotificationChannel(channel)
+   }
+ 

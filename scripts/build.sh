@@ -111,8 +111,28 @@ else
 fi
 info "HEAD: $(git -C "$SRC" rev-parse HEAD)"
 
-# Discard any patches from a previous run so overrides apply to pristine sources.
-git -C "$SRC" checkout -q -- android/build.gradle Makefile 2>/dev/null || true
+# Reset to pristine sources so overrides and patches apply cleanly on re-runs.
+git -C "$SRC" checkout -q -- . 2>/dev/null || true
+
+# ---- 3b. per-ref patches ----------------------------------------------------
+# Upstream runs at minSdk 26, so API-guard rot accumulates: calls to APIs newer
+# than 22 that upstream can never hit. Each patch here fixes one, and is scoped
+# to a single ref so it is obvious what diverges from upstream and why.
+PATCHDIR="$REPO_ROOT/patches/$TS_REF"
+[ -d "$PATCHDIR" ] || PATCHDIR="$REPO_ROOT/patches/${TS_REF%%-*}"
+if [ -d "$PATCHDIR" ]; then
+  for p in "$PATCHDIR"/*.patch; do
+    [ -e "$p" ] || continue
+    if git -C "$SRC" apply --check "$p" 2>/dev/null; then
+      git -C "$SRC" apply "$p"
+      info "Applied patch: $(basename "$p")"
+    else
+      die "patch does not apply to $TS_REF: $(basename "$p")"
+    fi
+  done
+else
+  info "No patches for $TS_REF"
+fi
 
 # ---- 4. Go toolchain --------------------------------------------------------
 if [ -x "$SRC/tool/go" ]; then
@@ -151,6 +171,20 @@ githubPassword=
 github2FASecret=
 EOF
 
+# ---- 5b. tailscale.version --------------------------------------------------
+# Must precede the native build: version-ldflags.sh does `source tailscale.version`,
+# and 1.78.0+ build.gradle reads it via getVersionProperty().
+#
+# Getting this order wrong is not a soft failure. Without the stamp,
+# version.Long() is empty and tailscale.com/version has an android+tailscale_go
+# init() that panics on an invalid version — the app dies with SIGABRT at
+# startup, long after a build that looked entirely successful.
+if [ ! -f "$SRC/tailscale.version" ]; then
+  info "Generating tailscale.version (mkversion)"
+  ( cd "$SRC" && "$GO" run tailscale.com/cmd/mkversion > tailscale.version )
+fi
+[ -s "$SRC/tailscale.version" ] || die "tailscale.version is missing or empty"
+
 # ---- 6. native library ------------------------------------------------------
 mkdir -p "$SRC/android/libs"
 if [ -d "$SRC/libtailscale" ]; then
@@ -161,8 +195,16 @@ if [ -d "$SRC/libtailscale" ]; then
   export PATH="$GOBIN:$PATH"
   ( cd "$SRC" && "$GO" install golang.org/x/mobile/cmd/gobind golang.org/x/mobile/cmd/gomobile )
 
+  # Do not swallow this failure — an unstamped build panics at runtime, not here.
   LDFLAGS=""
-  if [ -x "$SRC/version-ldflags.sh" ]; then LDFLAGS="$("$SRC/version-ldflags.sh" 2>/dev/null || true)"; fi
+  if [ -x "$SRC/version-ldflags.sh" ]; then
+    LDFLAGS="$( cd "$SRC" && ./version-ldflags.sh )" \
+      || die "version-ldflags.sh failed; refusing to build an unstamped AAR (it would SIGABRT on launch)"
+    case "$LDFLAGS" in
+      *version.longStamp=?*) : ;;
+      *) die "version-ldflags.sh produced no longStamp; refusing to build an unstamped AAR" ;;
+    esac
+  fi
   TAGS=""
   if [ -x "$SRC/build-tags.sh" ]; then TAGS="$("$SRC/build-tags.sh" 2>/dev/null || true)"; fi
 

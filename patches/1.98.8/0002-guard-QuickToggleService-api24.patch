@@ -1,0 +1,31 @@
+diff --git a/android/src/main/java/com/tailscale/ipn/App.kt b/android/src/main/java/com/tailscale/ipn/App.kt
+index 11e8b4d..5a8bb56 100644
+--- a/android/src/main/java/com/tailscale/ipn/App.kt
++++ b/android/src/main/java/com/tailscale/ipn/App.kt
+@@ -197,7 +197,10 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
+               }
+               val vpnRunning = state == Ipn.State.Starting || state == Ipn.State.Running
+               updateConnStatus(ableToStartVPN)
+-              QuickToggleService.setVPNRunning(vpnRunning)
++              // TileService is API 24+; see the guard in updateConnStatus().
++              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
++                QuickToggleService.setVPNRunning(vpnRunning)
++              }
+               // Update notification status when VPN is running
+               if (vpnRunning) {
+                 notifyStatus(
+@@ -289,7 +292,13 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
+    */
+   private fun updateConnStatus(ableToStartVPN: Boolean) {
+     setAbleToStartVPN(ableToStartVPN)
+-    QuickToggleService.updateTile()
++    // QuickToggleService extends TileService (API 24+). Referencing it at all on
++    // an older device throws NoClassDefFoundError, which kills the coroutine that
++    // drives connection state. Quick Settings tiles do not exist pre-24, so
++    // skipping the update is a correct no-op.
++    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
++      QuickToggleService.updateTile()
++    }
+     TSLog.d("App", "Set Tile Ready: $ableToStartVPN")
+   }
+ 

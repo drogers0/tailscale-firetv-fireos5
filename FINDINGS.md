@@ -267,6 +267,84 @@ fdroid/play split disappeared. Good news for Fire OS, which has no Play Services
 **1.64.0 is the chosen target**: earliest release with a complete UI, therefore the least
 accumulated reliance on API 26+.
 
+## 11. Current stable (1.98.8) is viable to build — guard rot is only 3 patches
+
+Testing the "patch new code rather than freeze on old code" decision empirically:
+
+| | 1.64.0 | 1.98.8 |
+|---|---|---|
+| Patches needed to launch | 1 | 3 |
+| `gomobile bind -androidapi 22` | works | works |
+| Manifest merger at minSdk 22 | clean | clean |
+| Go core age | Apr 2024 | current |
+
+The API-26 floor is a **declaration**, not a dependency: no library rejected minSdk 22 and
+the native layer cross-compiles for API 22 without complaint. Upstream's real debt is a
+handful of API guards that rotted once they became dead code at minSdk 26.
+
+Crashes found, in the order they surfaced (each hidden behind the previous):
+
+1. `NoClassDefFoundError: NotificationChannel` — API 26, unguarded in `App.onCreate()`
+2. `SIGABRT`, Go panic in `version.init.0()` — **build-script bug**, see below
+3. `NoClassDefFoundError: QuickToggleService` — `TileService`, API 24, 2 call sites
+4. `UninitializedPropertyAccessException` — regression from patch 1 placing the guard
+   above a `lateinit` assignment
+5. `NoSuchMethodError: getForegroundService` — API 26, on the Connect path
+
+Note 5: `startForegroundForLogin()` wraps its call in `catch (e: Exception)`, which would
+**not** have caught it — `NoSuchMethodError` is an `Error`.
+
+### The version-stamp trap
+
+`version-ldflags.sh` does a relative `source tailscale.version`. Invoking it by absolute
+path from elsewhere silently fails; combined with `|| true` this produced an **unstamped
+AAR** that built and installed cleanly, then aborted at startup:
+
+```
+//go:build tailscale_go && android
+// panic if the builder is screwed up and we fail to stamp a valid version string.
+```
+
+The guard is deliberate and it worked exactly as intended. `build.sh` now generates
+`tailscale.version` before the native build, runs the script with the correct CWD, and
+hard-fails if no `longStamp` is produced.
+
+## 12. The real blocker: socket binding on API 22
+
+Not a version guard, and the reason this is paused:
+
+```
+[unexpected] IPNService.bindSocketToNetwork(53) returned false
+App: bindSocketToActiveNetwork: no cached default network; noop
+```
+
+Tailscale binds its own sockets to the underlying network so its traffic escapes the
+tunnel. On Android 5.1 no default network is ever cached, so those sockets go unbound.
+One fault, four symptoms: the DERP "relay server unavailable" warning, the device showing
+**offline** to the control plane, an empty peer list, and an empty exit-node picker.
+
+The exit node was present in the netmap the whole time:
+
+```
+wgcfg: skipped unselected exit nodes from 1 nodes: exit-node-host (nXXXXXXXXXXXCNTRL)
+```
+
+Likely cause: `registerDefaultNetworkCallback()` is API 24. See [STATUS.md](STATUS.md).
+
+### Corrections recorded here deliberately
+
+- **"Shared devices cannot be used as exit nodes"** — wrong. A search summary said so; the
+  user's Mac lists `exit-node-host.othernet.ts.net` (owned by another user, on another
+  tailnet) as a usable exit node, `ExitNodeOption: True`, `AllowedIPs` including
+  `0.0.0.0/0` and `::/0`. Direct observation beat the secondary source.
+- **The stale system CA store** — a real finding (`tls=20`; DERP now chains to ISRG Root
+  X2 / Root YE, which a 2015 trust store lacks) but **not** the cause. Tailscale bakes
+  X1+X2 in via `net/bakedroots`, enabled unless built `ts_omit_bakedroots`. Our tags are
+  only `tailscale_go`, so the fallback is compiled in.
+- **MDM settings showing "not set"** — normal. `MDMSetting` carries `(value, wasExplicitlySet)`;
+  unset means "use default". Values arrive via `RestrictionsManager.applicationRestrictions`,
+  always empty on a non-enrolled device.
+
 ## 8. Verification method
 
 APK metadata was read by parsing the binary `AndroidManifest.xml`, never inferred from

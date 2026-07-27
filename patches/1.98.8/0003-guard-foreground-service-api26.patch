@@ -1,0 +1,46 @@
+diff --git a/android/src/main/java/com/tailscale/ipn/App.kt b/android/src/main/java/com/tailscale/ipn/App.kt
+index 11e8b4d..5a8bb56 100644
+--- a/android/src/main/java/com/tailscale/ipn/App.kt
++++ b/android/src/main/java/com/tailscale/ipn/App.kt
+@@ -575,7 +584,15 @@ open class UninitializedApp : Application() {
+           action = IPNService.ACTION_START_FOREGROUND_ONLY
+         }
+     try {
+-      startForegroundService(intent)
++      // Context.startForegroundService() is API 26+. Below that there is no
++      // background-start restriction, so a plain startService() is equivalent.
++      // Note the catch below is Exception; NoSuchMethodError is an Error and
++      // would not be caught, so this must be guarded rather than caught.
++      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
++        startForegroundService(intent)
++      } else {
++        startService(intent)
++      }
+     } catch (e: Exception) {
+       TSLog.e(TAG, "startForegroundForLogin hit exception: $e")
+     }
+@@ -585,14 +602,17 @@ open class UninitializedApp : Application() {
+     val intent = Intent(this, IPNService::class.java).apply { action = IPNService.ACTION_START_VPN }
+     // FLAG_UPDATE_CURRENT ensures that if the intent is already pending, the existing intent will
+     // be updated rather than creating multiple redundant instances.
++    // PendingIntent.getForegroundService() is API 26+; getService() is the
++    // pre-26 equivalent, since background-start restrictions do not exist there.
++    val piFlags =
++        PendingIntent.FLAG_UPDATE_CURRENT or
++            PendingIntent.FLAG_IMMUTABLE // FLAG_IMMUTABLE for Android 12+
+     val pendingIntent =
+-        PendingIntent.getForegroundService(
+-            this,
+-            0,
+-            intent,
+-            PendingIntent.FLAG_UPDATE_CURRENT or
+-                PendingIntent.FLAG_IMMUTABLE // FLAG_IMMUTABLE for Android 12+
+-            )
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
++          PendingIntent.getForegroundService(this, 0, intent, piFlags)
++        } else {
++          PendingIntent.getService(this, 0, intent, piFlags)
++        }
+     try {
+       pendingIntent.send()
+     } catch (foregroundServiceStartException: IllegalStateException) {

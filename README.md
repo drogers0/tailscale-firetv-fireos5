@@ -95,28 +95,32 @@ hardware — use the [official Tailscale client](https://tailscale.com/docs/inst
 
 ## Status
 
-Tested on a Fire TV Stick 2nd gen (AFTT), Fire OS 5.2.9.5:
+> **⚠️ Not yet usable. Paused mid-investigation — see [STATUS.md](STATUS.md).**
+
+Tested on a Fire TV Stick 2nd gen (AFTT), Fire OS 5.2.9.5. Current target is **1.98.8**
+(current stable) with three patches:
 
 | | |
 |---|---|
-| Installs on API 22 | ✅ verified |
-| Reaches control plane | ✅ verified (even a 2020 client does) |
-| **UI renders on GLES 2.0** | ✅ **verified — the core claim** |
-| Login / VPN / exit node | ⏳ under test |
+| Builds at minSdk 22 | ✅ including `gomobile bind -androidapi 22` |
+| Installs on API 22 | ✅ versionCode 468, targetSdk 35 |
+| **Compose UI renders on GLES 2.0** | ✅ the original blocker, solved |
+| Login | ✅ completes and persists |
+| Tunnel comes up | ✅ `tun0` with a tailnet IP |
+| **Stays reachable on the tailnet** | ❌ **open blocker** |
 
-`Displayed com.tailscale.ipn/.MainActivity: +4s662ms`, first frame drawn, no GLES fatal,
-screenshot shows a fully rendered Compose UI. The graphics blocker that defeats every
-downloadable option is beaten.
+The remaining fault is `IPNService.bindSocketToNetwork()` failing on Android 5.1 — no
+default network is ever cached, so Tailscale's own sockets go unbound. That single fault
+causes the relay warning, the device showing offline, the empty peer list, and the empty
+exit-node picker. Details and resume steps in [STATUS.md](STATUS.md).
 
-> ### RC1 is known-broken — do not use it
->
-> [`1.59.53-fireos5-rc1`](../../releases/tag/1.59.53-fireos5-rc1) was built from
-> `3926cf4b56`, an in-flight snapshot whose screens are stubs. It renders, then does
-> nothing: Connect is inert and Settings displays "Future Home of Settings". Kept only as
-> evidence for the graphics finding. Use a later release.
+> **Older releases are superseded.** [`1.59.53-fireos5-rc1`](../../releases/tag/1.59.53-fireos5-rc1)
+> renders but its screens are stubs ("Future Home of Settings"), and
+> [`1.64.0-fireos5-rc2`](../../releases/tag/1.64.0-fireos5-rc2) has a complete UI but an
+> older Go core. Both are retained as evidence, not for use.
 
-Everything ships as a **release candidate** until login and exit-node selection are
-confirmed on hardware. Launch is slow on this class of device — ~4.7 s to first frame.
+Everything ships as a **release candidate**. Launch is slow on this hardware — 5-7 s to
+first frame.
 
 ## Quick start
 
