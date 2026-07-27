@@ -1,0 +1,172 @@
+{"logtail":{"client_time":"2026-07-27T01:26:12.052938727Z","proc_id":3948624013,"proc_seq":53},"text":"4.4M/103.2M control: control server key from https://controlplane.tailscale.com: ts2021=[fSeS+], legacy=[nlFWp]\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.058190265Z","proc_id":3948624013,"proc_seq":54},"text":"4.4M/103.2M control: RegisterReq: onode= node=[UdUKT] fup=false nks=false\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.062911496Z","proc_id":3948624013,"proc_seq":55},"v":1,"text":"4.4M/103.2M control: creating new noise client\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.612059573Z","proc_id":3948624013,"proc_seq":56},"text":"4.5M/103.4M control: RegisterReq: got response; nodeKeyExpired=false, machineAuthorized=true; authURL=false\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.612452188Z","proc_id":3948624013,"proc_seq":57},"v":1,"text":"4.5M/103.4M control: No AuthURL\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.612744496Z","proc_id":3948624013,"proc_seq":58},"v":1,"text":"4.5M/103.4M control: sendStatus: authRoutine-success: loggedIn=true inMapPoll=false\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.613436496Z","proc_id":3948624013,"proc_seq":59},"v":1,"text":"4.5M/103.4M control: restartMap: synced=false\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.613679111Z","proc_id":3948624013,"proc_seq":60},"v":1,"text":"4.5M/103.4M control: mapRoutine: context done.\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.613940727Z","proc_id":3948624013,"proc_seq":61},"v":1,"text":"4.5M/103.4M control: authRoutine: loggedIn=true; goal=nil paused=false\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.614776188Z","proc_id":3948624013,"proc_seq":62},"v":1,"text":"4.5M/103.4M control: PollNetMap: stream=false ep=[]\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.614874573Z","proc_id":3948624013,"proc_seq":63},"v":1,"text":"4.5M/103.4M authReconfig: netmap not yet valid. Skipping.\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.615265804Z","proc_id":3948624013,"proc_seq":64},"v":1,"text":"4.5M/103.6M control: mapRoutine: loggedIn=true\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.615773188Z","proc_id":3948624013,"proc_seq":65},"v":1,"text":"4.5M/103.6M control: PollNetMap: stream=true ep=[]\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.820588958Z","proc_id":3948624013,"proc_seq":66},"v":1,"controltime":"2026-07-27T01:26:12.700505673Z"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.821125419Z","proc_id":3948624013,"proc_seq":67},"text":"4.9M/103.6M health(warnable=not-in-map-poll): ok\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.821967881Z","proc_id":3948624013,"proc_seq":68},"text":"4.9M/103.6M control: netmap: got new dial plan from control\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.825239727Z","proc_id":3948624013,"proc_seq":69},"v":1,"text":"4.9M/103.8M control: new network map (periodic):\nnetmap: self: [UdUKT] auth=machine-authorized u=user@example.com [100.64.0.10/32 fd7a:115c:a1e0::d636:597b/128]\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.825676573Z","proc_id":3948624013,"proc_seq":70},"v":1,"text":"4.9M/103.8M control: mapRoutine: netmap received: loggedIn=true inMapPoll=true\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.825991188Z","proc_id":3948624013,"proc_seq":71},"v":1,"text":"4.9M/103.8M control: sendStatus: mapRoutine-got-netmap: loggedIn=true inMapPoll=true\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.832422496Z","proc_id":3948624013,"proc_seq":72},"v":2,"text":"4.9M/103.8M netstack: registered IP 100.64.0.10/32\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.83295765Z","proc_id":3948624013,"proc_seq":73},"v":2,"text":"4.9M/103.8M netstack: registered IP fd7a:115c:a1e0::d636:597b/128\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.833951573Z","proc_id":3948624013,"proc_seq":74},"v":1,"text":"4.9M/103.8M magicsock: got updated network map; 6 peers\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.835434496Z","proc_id":3948624013,"proc_seq":75},"v":1,"text":"4.9M/104.0M control: successful lite map update in 220ms\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.836395035Z","proc_id":3948624013,"proc_seq":76},"text":"4.9M/104.0M active login: user@example.com\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.854623035Z","proc_id":3948624013,"proc_seq":77},"v":1,"text":"5.0M/104.1M netmap packet filter: 1 filters\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.858562804Z","proc_id":3948624013,"proc_seq":78},"text":"5.0M/104.1M netmap: suggested exit node: no preferred DERP, try again later\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.859565727Z","proc_id":3948624013,"proc_seq":79},"text":"5.0M/104.2M Switching ipn state NoState -> Starting (WantRunning=true, nm=true)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.866100881Z","proc_id":3948624013,"proc_seq":80},"v":1,"text":"5.2M/104.3M wgcfg: skipped unselected exit nodes from 1 nodes: exit-node-host (nXXXXXXXXXXXCNTRL)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.866655342Z","proc_id":3948624013,"proc_seq":81},"v":1,"text":"5.2M/104.3M wgcfg: skipped expired peers from 1 nodes: desktop-a (nYYYYYYYYYYYCNTRL)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.867632727Z","proc_id":3948624013,"proc_seq":82},"text":"5.2M/104.3M tstun: peer config: peerConfigTable{nativeAddr4: 100.64.0.10, nativeAddr6: fd7a:115c:a1e0::d636:597b, }\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.872627342Z","proc_id":3948624013,"proc_seq":83},"text":"5.2M/104.3M magicsock: SetPrivateKey called (init)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.879826265Z","proc_id":3948624013,"proc_seq":84},"text":"5.2M/104.4M wgengine: Reconfig: configuring userspace WireGuard config (with 5 peers)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.881052958Z","proc_id":3948624013,"proc_seq":85},"text":"5.2M/104.4M wgengine: Reconfig: configuring router\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.882641188Z","proc_id":3948624013,"proc_seq":86},"text":"5.2M/104.4M router: consolidated 8 routes down to 7\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.883595573Z","proc_id":3948624013,"proc_seq":87},"text":"5.2M/104.4M monitor: gateway and self IP changed: gw=192.168.1.50 self=192.168.1.50\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.884017188Z","proc_id":3948624013,"proc_seq":88},"text":"5.2M/104.4M wgengine: Reconfig: configuring DNS\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.886060035Z","proc_id":3948624013,"proc_seq":89},"text":"5.2M/104.6M dns: Set: {DefaultResolvers:[] Routes:{examplenet.ts.net.:[] ts.net.:[199.247.155.53 2620:111:8007::53]}+65arpa SearchDomains:[examplenet.ts.net.] Hosts:7}\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.891780727Z","proc_id":3948624013,"proc_seq":90},"text":"getDNSBaseConfig: none found; falling back to Google public DNS\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.893242035Z","proc_id":3948624013,"proc_seq":91},"text":"5.6M/104.6M dns: Resolvercfg: {Routes:{.:[8.8.8.8 8.8.4.4 2001:4860:4860::8888 2001:4860:4860::8844] ts.net.:[199.247.155.53 2620:111:8007::53]} Hosts:7 LocalDomains:[examplenet.ts.net.]+65arpa}\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.894205573Z","proc_id":3948624013,"proc_seq":92},"text":"5.6M/104.6M dns: OScfg: {Nameservers:[100.100.100.100 fd7a:115c:a1e0::53] SearchDomains:[examplenet.ts.net.] }\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.895487727Z","proc_id":3948624013,"proc_seq":93},"v":1,"text":"5.6M/104.6M wgengine: Reconfig done\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.896056112Z","proc_id":3948624013,"proc_seq":94},"v":1,"text":"5.6M/104.6M authReconfig: ra=true dns=true 0x02: <nil>\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.897794342Z","proc_id":3948624013,"proc_seq":95},"v":1,"text":"5.6M/104.6M initPeerAPIListener: entered\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.89862465Z","proc_id":3948624013,"proc_seq":96},"text":"5.5M/104.6M peerapi: serving on http://100.64.0.10:1\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.899325035Z","proc_id":3948624013,"proc_seq":97},"text":"5.5M/104.6M peerapi: serving on http://[fd7a:115c:a1e0::d636:597b]:1\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.903727188Z","proc_id":3948624013,"proc_seq":98},"v":1,"text":"5.5M/104.6M wgcfg: skipped unselected exit nodes from 1 nodes: exit-node-host (nXXXXXXXXXXXCNTRL)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.904124112Z","proc_id":3948624013,"proc_seq":99},"v":1,"text":"5.5M/104.6M wgcfg: skipped expired peers from 1 nodes: desktop-a (nYYYYYYYYYYYCNTRL)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.905321727Z","proc_id":3948624013,"proc_seq":100},"v":1,"text":"5.5M/104.6M wgengine: Reconfig done\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.90569965Z","proc_id":3948624013,"proc_seq":101},"v":1,"text":"5.5M/104.6M authReconfig: ra=true dns=true 0x02: <nil>\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.906059342Z","proc_id":3948624013,"proc_seq":102},"v":1,"text":"5.5M/104.6M initPeerAPIListener: entered\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.906358188Z","proc_id":3948624013,"proc_seq":103},"v":1,"text":"5.5M/104.6M initPeerAPIListener: 2 netmap addresses match existing listeners\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.907263958Z","proc_id":3948624013,"proc_seq":104},"v":1,"text":"5.5M/104.6M control: HostInfo: {\"IPNVersion\":\"1.98.8-t1241b225b-gbcbaf1889\",\"BackendLogID\":\"6e449609e81c9d4dd4fb686cec01eff606a727a3dd0021dd7f582583169ae829\",\"OS\":\"android\",\"OSVersion\":\"5.1.1\",\"Package\":\"unknown\",\"DeviceModel\":\"David's Fire TV Stick\",\"Hostname\":\"David's Fire TV Stick\",\"GoArch\":\"arm\",\"GoArchVar\":\"7\",\"GoVersion\":\"go1.26.3\",\"Services\":[{\"Proto\":\"peerapi4\",\"Port\":1},{\"Proto\":\"peerapi6\",\"Port\":1},{\"Proto\":\"peerapi-dns-proxy\",\"Port\":1}],\"Userspace\":false,\"UserspaceRouter\":true,\"AppConnector\":false,\"StateEncrypted\":true}\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.908023419Z","proc_id":3948624013,"proc_seq":105},"v":1,"text":"5.5M/104.6M control: PollNetMap: stream=false ep=[]\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.942487342Z","proc_id":3948624013,"proc_seq":106},"text":"error: WatchNotifications: OnNotify: Bad position (limit 16261): -118\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.945300342Z","proc_id":3948624013,"proc_seq":107},"text":"App: Set Tile Ready: true"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.947713727Z","proc_id":3948624013,"proc_seq":108},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/ on app libtailscale.Libtailscale$proxyApplication@30968a72"}
+{"logtail":{"client_time":"2026-07-27T01:26:12.948619496Z","proc_id":3948624013,"proc_seq":109},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/current on app libtailscale.Libtailscale$proxyApplication@30968a72"}
+{"logtail":{"client_time":"2026-07-27T01:26:13.093435342Z","proc_id":3948624013,"proc_seq":110},"v":2,"text":"5.7M/105.3M netcheck: attempting to do captive portal detection on interface wlan0\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:13.093962573Z","proc_id":3948624013,"proc_seq":111},"v":2,"text":"5.7M/105.3M netcheck: 5 available captive portal detection endpoints; trying 5\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:13.121219188Z","proc_id":3948624013,"proc_seq":112},"v":1,"text":"4.9M/105.4M control: successful lite map update in 213ms\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:13.415745342Z","proc_id":3948624013,"proc_seq":113},"text":"health: Ignoring and dropping all health messages in state Starting"}
+{"logtail":{"client_time":"2026-07-27T01:26:13.416464035Z","proc_id":3948624013,"proc_seq":114},"text":"health: Removing notifications for []"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.523477958Z","proc_id":3948624013,"proc_seq":115},"text":"4.9M/105.4M netcheck: DetectCaptivePortal(found=false)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.524748189Z","proc_id":3948624013,"proc_seq":116},"v":1,"text":"4.9M/105.4M netcheck: report: udp=true v6=false v6os=true mapvarydest=true portmap= v4a=203.0.113.10:54170 captiveportal=false derp=27 derpdist=1v4:100ms,2v4:144ms,3v4:302ms,4v4:172ms,5v4:415ms,6v4:263ms,7v4:221ms,8v4:166ms,9v4:101ms,10v4:139ms,11v4:202ms,12v4:111ms,13v4:111ms,14v4:171ms,15v4:313ms,16v4:87ms,17v4:132ms,18v4:181ms,19v4:174ms,20v4:256ms,21v4:130ms,22v4:176ms,23v4:243ms,24v4:181ms,25v4:316ms,26v4:176ms,27v4:87ms,28v4:192ms\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.525542727Z","proc_id":3948624013,"proc_seq":117},"text":"4.9M/105.6M magicsock: home DERP changing from derp-0 [0ms] to derp-27 [86ms] (forced=false)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.526160496Z","proc_id":3948624013,"proc_seq":118},"text":"4.9M/105.6M magicsock: home is now derp-27 (iad)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.526898112Z","proc_id":3948624013,"proc_seq":119},"text":"4.9M/105.6M magicsock: adding connection to derp-27 for home-keep-alive\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.529309881Z","proc_id":3948624013,"proc_seq":120},"text":"4.9M/105.6M magicsock: 1 active derp conns: derp-27=cr0s,wr0s\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.531243035Z","proc_id":3948624013,"proc_seq":121},"text":"5.0M/105.6M derphttp.Client.Connect: connecting to derp-27 (iad)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.531724573Z","proc_id":3948624013,"proc_seq":122},"text":"4.9M/105.6M control: NetInfo: NetInfo{varies=true ipv6=false ipv6os=true udp=true icmpv4=false derp=#27 portmap= link=\"\" firewallmode=\"\"}\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.532881112Z","proc_id":3948624013,"proc_seq":123},"text":"5.0M/105.6M writing netmap to disk cache\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.533549035Z","proc_id":3948624013,"proc_seq":124},"v":1,"text":"5.0M/105.6M control: PollNetMap: stream=false ep=[]\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.553430804Z","proc_id":3948624013,"proc_seq":125},"text":"5.0M/106.3M magicsock: endpoints changed: 203.0.113.10:54170 (stun), 203.0.113.10:54166 (stun), 192.168.1.50:42856 (local), 192.168.49.1:42856 (local)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.554082804Z","proc_id":3948624013,"proc_seq":126},"v":2,"text":"5.0M/106.3M control: client.newEndpoints([{203.0.113.10:54170 stun} {203.0.113.10:54166 stun} {192.168.1.50:42856 local} {192.168.49.1:42856 local}])\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.555551419Z","proc_id":3948624013,"proc_seq":127},"text":"5.0M/106.3M health(warnable=warming-up): ok\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.555900112Z","proc_id":3948624013,"proc_seq":128},"text":"5.0M/106.3M Switching ipn state Starting -> Running (WantRunning=true, nm=true)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.557656958Z","proc_id":3948624013,"proc_seq":129},"text":"5.0M/106.3M health(warnable=no-derp-connection): ok\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.563274265Z","proc_id":3948624013,"proc_seq":130},"text":"health: Health updated: [warming-up]"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.563899958Z","proc_id":3948624013,"proc_seq":131},"text":"health: Ignoring warming-up because warming up"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.565136804Z","proc_id":3948624013,"proc_seq":132},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/ on app libtailscale.Libtailscale$proxyApplication@30968a72"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.566496727Z","proc_id":3948624013,"proc_seq":133},"text":"LocalAPIRequest: Executing request:GET:/localapi/v0/profiles/current on app libtailscale.Libtailscale$proxyApplication@30968a72"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.567059573Z","proc_id":3948624013,"proc_seq":134},"text":"App: Set Tile Ready: true"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.764048958Z","proc_id":3948624013,"proc_seq":135},"text":"VpnPermissions: vpnIntent=null"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.794265727Z","proc_id":3948624013,"proc_seq":136},"v":1,"text":"5.2M/107.3M control: successful lite map update in 262ms\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.794944881Z","proc_id":3948624013,"proc_seq":137},"text":"5.2M/107.3M health(warnable=no-derp-connection): ok\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.795213265Z","proc_id":3948624013,"proc_seq":138},"v":1,"text":"5.2M/107.3M control: PollNetMap: stream=false ep=[203.0.113.10:54170 203.0.113.10:54166 192.168.1.50:42856 192.168.49.1:42856]\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.809966035Z","proc_id":3948624013,"proc_seq":139},"v":1,"text":"5.2M/107.3M netcheck: report: udp=true v6=false v6os=true mapvarydest=true portmap= v4a=203.0.113.10:54175 derp=27 derpdist=1v4:73ms,16v4:72ms,27v4:72ms\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.837880342Z","proc_id":3948624013,"proc_seq":140},"text":"5.2M/107.3M magicsock: endpoints changed: 203.0.113.10:54175 (stun), 203.0.113.10:54170 (stun), 203.0.113.10:54166 (stun), 192.168.1.50:42856 (local), 192.168.49.1:42856 (local)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.838850112Z","proc_id":3948624013,"proc_seq":141},"v":2,"text":"5.2M/107.3M control: client.newEndpoints([{203.0.113.10:54175 stun} {203.0.113.10:54170 stun} {203.0.113.10:54166 stun} {192.168.1.50:42856 local} {192.168.49.1:42856 local}])\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.840923112Z","proc_id":3948624013,"proc_seq":142},"text":"5.2M/107.3M health(warnable=no-derp-connection): ok\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.950859496Z","proc_id":3948624013,"proc_seq":143},"text":"LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs on app libtailscale.Libtailscale$proxyApplication@30968a72"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.951649035Z","proc_id":3948624013,"proc_seq":144},"text":"localapi: [PATCH] /localapi/v0/prefs\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.969149496Z","proc_id":3948624013,"proc_seq":145},"text":"onVPNRequested: rebind required\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.97229565Z","proc_id":3948624013,"proc_seq":146},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=64) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.973634958Z","proc_id":3948624013,"proc_seq":147},"text":"5.3M/107.3M magicsock: [warning] failed to force-set UDP read buffer size to 7340032: operation not permitted; using kernel default values (impacts throughput only)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.974418881Z","proc_id":3948624013,"proc_seq":148},"text":"5.3M/107.3M magicsock: [warning] failed to force-set UDP write buffer size to 7340032: operation not permitted; using kernel default values (impacts throughput only)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.976493342Z","proc_id":3948624013,"proc_seq":149},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=65) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.976772189Z","proc_id":3948624013,"proc_seq":150},"text":"5.3M/107.3M magicsock: [warning] failed to force-set UDP read buffer size to 7340032: operation not permitted; using kernel default values (impacts throughput only)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.977617419Z","proc_id":3948624013,"proc_seq":151},"text":"5.3M/107.3M magicsock: [warning] failed to force-set UDP write buffer size to 7340032: operation not permitted; using kernel default values (impacts throughput only)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.978509573Z","proc_id":3948624013,"proc_seq":152},"text":"5.3M/107.3M Rebind; defIf=\"\", ips=[]\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.979701342Z","proc_id":3948624013,"proc_seq":153},"text":"updateTUN: changed"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.979973496Z","proc_id":3948624013,"proc_seq":154},"text":"updateTUN: closing old TUNs"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.980250419Z","proc_id":3948624013,"proc_seq":155},"text":"updateTUN: closed old TUNs"}
+{"logtail":{"client_time":"2026-07-27T01:26:14.991842727Z","proc_id":3948624013,"proc_seq":156},"text":"5.2M/107.3M health(warnable=no-derp-connection): ok\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.009719573Z","proc_id":3948624013,"proc_seq":157},"text":"IPNService: Application packages were set by user: []"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.010037881Z","proc_id":3948624013,"proc_seq":158},"text":"IPNService: Disallowing app: com.google.android.apps.messaging"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.011031112Z","proc_id":3948624013,"proc_seq":159},"text":"IPNService: Disallowing app: com.google.android.projection.gearhead"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.011978958Z","proc_id":3948624013,"proc_seq":160},"text":"IPNService: Disallowing app: com.gopro.smarty"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.012857727Z","proc_id":3948624013,"proc_seq":161},"text":"IPNService: Disallowing app: com.sonos.acr"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.013643496Z","proc_id":3948624013,"proc_seq":162},"text":"IPNService: Disallowing app: com.sonos.acr2"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.014382727Z","proc_id":3948624013,"proc_seq":163},"text":"IPNService: Disallowing app: com.google.android.apps.chromecast.app"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.01509965Z","proc_id":3948624013,"proc_seq":164},"text":"IPNService: Disallowing app: com.samsung.attvvm"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.016253496Z","proc_id":3948624013,"proc_seq":165},"text":"IPNService: Disallowing app: com.att.mobile.android.vvm"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.019275265Z","proc_id":3948624013,"proc_seq":166},"text":"IPNService: Disallowing app: com.tmobile.vvm.application"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.02004765Z","proc_id":3948624013,"proc_seq":167},"text":"IPNService: Disallowing app: com.metropcs.service.vvm"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.021294958Z","proc_id":3948624013,"proc_seq":168},"text":"IPNService: Disallowing app: com.mizmowireless.vvm"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.022033189Z","proc_id":3948624013,"proc_seq":169},"text":"IPNService: Disallowing app: com.vna.service.vvm"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.023423727Z","proc_id":3948624013,"proc_seq":170},"text":"IPNService: Disallowing app: com.dish.vvm"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.025113189Z","proc_id":3948624013,"proc_seq":171},"v":1,"text":"5.2M/107.3M control: successful lite map update in 230ms\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.02579965Z","proc_id":3948624013,"proc_seq":172},"v":1,"text":"5.2M/107.3M control: PollNetMap: stream=false ep=[203.0.113.10:54175 203.0.113.10:54170 203.0.113.10:54166 192.168.1.50:42856 192.168.49.1:42856]\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.02977865Z","proc_id":3948624013,"proc_seq":173},"text":"5.2M/107.3M health(warnable=no-derp-connection): ok\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.032344342Z","proc_id":3948624013,"proc_seq":174},"text":"IPNService: Disallowing app: com.comcast.modesto.vvm.client"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.034606112Z","proc_id":3948624013,"proc_seq":175},"text":"IPNService: Disallowing app: com.google.android.apps.scone"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.040438035Z","proc_id":3948624013,"proc_seq":176},"text":"updateTUN: got new builder"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.040788112Z","proc_id":3948624013,"proc_seq":177},"text":"updateTUN: set MTU"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.042322112Z","proc_id":3948624013,"proc_seq":178},"text":"updateTUN: set nameservers"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.063444727Z","proc_id":3948624013,"proc_seq":179},"text":"updateTUN: added routes: v4=6 v6=1 total=7 (input routes=7, localRoutes=0)"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.063807342Z","proc_id":3948624013,"proc_seq":180},"text":"updateTUN: input routes: [100.64.0.70/32 100.64.0.50/32 100.64.0.30/32 100.64.0.20/32 100.100.100.100/32 100.64.0.40/32 fd7a:115c:a1e0::/48]"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.06401065Z","proc_id":3948624013,"proc_seq":181},"text":"updateTUN: input local routes: []"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.064329035Z","proc_id":3948624013,"proc_seq":182},"text":"updateTUN: effective routes v4: [100.64.0.70/32 100.64.0.50/32 100.64.0.30/32 100.64.0.20/32 100.100.100.100/32 100.64.0.40/32]"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.064649881Z","proc_id":3948624013,"proc_seq":183},"text":"updateTUN: effective routes v6: [fd7a:115c:a1e0::/48]"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.067255342Z","proc_id":3948624013,"proc_seq":184},"text":"updateTUN: added 2 local addrs"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.103576112Z","proc_id":3948624013,"proc_seq":185},"text":"5.3M/107.3M magicsock: derp-27 connected; connGen=1\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.104021189Z","proc_id":3948624013,"proc_seq":186},"text":"5.3M/107.3M health(warnable=no-derp-connection): ok\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.104924727Z","proc_id":3948624013,"proc_seq":187},"text":"5.3M/107.3M health(warnable=no-derp-connection): ok\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.179969189Z","proc_id":3948624013,"proc_seq":188},"text":"Setting vpn activity status to true\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.180609112Z","proc_id":3948624013,"proc_seq":189},"text":"updateTUN: established VPN"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.180973804Z","proc_id":3948624013,"proc_seq":190},"text":"updateTUN: detached FD"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.197151342Z","proc_id":3948624013,"proc_seq":191},"text":"updateTUN: created TUN device"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.197437958Z","proc_id":3948624013,"proc_seq":192},"text":"updateTUN: added TUN device"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.197704804Z","proc_id":3948624013,"proc_seq":193},"text":"tunnel brought up"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.197892419Z","proc_id":3948624013,"proc_seq":194},"text":"updateTUN: finished"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.226631035Z","proc_id":3948624013,"proc_seq":195},"v":1,"text":"6.4M/107.5M control: successful lite map update in 201ms\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.308874419Z","proc_id":3948624013,"proc_seq":196},"text":"VpnPermissions: vpnIntent=null"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.388775419Z","proc_id":3948624013,"proc_seq":197},"text":"LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs on app libtailscale.Libtailscale$proxyApplication@30968a72"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.392802958Z","proc_id":3948624013,"proc_seq":198},"text":"localapi: [PATCH] /localapi/v0/prefs\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.600693076Z","proc_id":3948624013,"proc_seq":199},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=78) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:15.602419153Z","proc_id":3948624013,"proc_seq":200},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=78) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:17.596446692Z","proc_id":3948624013,"proc_seq":201},"text":"health: Health updated: null"}
+{"logtail":{"client_time":"2026-07-27T01:26:31.07286677Z","proc_id":3948624013,"proc_seq":202},"metrics":"N20portmap_pcp_sentS0204N20portmap_pmp_sentS0404N22portmap_upnp_sentS0604N1edns_query_localS0816N1adns_query_fwdS0a16N2adns_query_fwd_successS0c14N22dns_query_fwd_dohS0e16N22dns_resolve_localS1016N3edns_resolve_local_error_refusedS1216N1enetcheck_reportS1404N28netcheck_report_fullS1602N2enetcheck_stun_send_ipv4S188801N2enetcheck_stun_recv_ipv4S1a8801N40controlclient_auto_status_queuedS1c04N4egauge_controlclient_map_requests_activeS1e02N34controlclient_map_requestsS200cN3econtrolclient_map_requests_liteS220aN3econtrolclient_map_requests_pollS2402N44controlclient_map_response_messageS2602N3ccontrolclient_map_response_mapS2802N1etstun_out_to_wgS2a1aN28tstun_out_to_wg_dropS2c1aN36tstun_out_to_wg_drop_filterS2e04N40gauge_magicsock_netmap_num_peersS300cN3cgauge_magicsock_num_derp_connsS3202N2cmagicsock_rebind_callsS3402N2cmagicsock_restun_callsS3606N34magicsock_update_endpointsS3804N50gauge_localbackend_current_watch_ipn_busS3a04N1eprofiles_switchS3c02N28gauge_profiles_countS3e02","text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=78) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:31.105005Z","proc_id":3948624013,"proc_seq":203},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=78) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:38.552254385Z","proc_id":3948624013,"proc_seq":204},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=85) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:38.558145693Z","proc_id":3948624013,"proc_seq":205},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=82) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:38.558447616Z","proc_id":3948624013,"proc_seq":206},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=85) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.762706155Z","proc_id":3948624013,"proc_seq":207},"v":1,"text":"6.9M/107.5M netcheck: report: udp=true v6=false v6os=true mapvarydest=true portmap= v4a=203.0.113.10:54170 derp=16 derpdist=1v4:1.149s,16v4:1.067s,27v4:1.064s\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.771997386Z","proc_id":3948624013,"proc_seq":208},"text":"6.9M/107.5M magicsock: home DERP changing from derp-27 [1064ms] to derp-16 [1067ms] (forced=false)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.776914847Z","proc_id":3948624013,"proc_seq":209},"text":"6.9M/107.5M magicsock: home is now derp-16 (mia)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.785223693Z","proc_id":3948624013,"proc_seq":210},"text":"6.9M/107.5M magicsock: adding connection to derp-16 for home-keep-alive\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.802095462Z","proc_id":3948624013,"proc_seq":211},"text":"6.9M/107.5M magicsock: 2 active derp conns: derp-16=cr0s,wr0s derp-27=cr25s,wr25s\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.811743847Z","proc_id":3948624013,"proc_seq":212},"text":"7.0M/107.5M derphttp.Client.Recv: connecting to derp-16 (mia)\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.822684078Z","proc_id":3948624013,"proc_seq":213},"text":"7.0M/107.5M writing netmap to disk cache\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.824841155Z","proc_id":3948624013,"proc_seq":214},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=85) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.826357232Z","proc_id":3948624013,"proc_seq":215},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=87) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.919412847Z","proc_id":3948624013,"proc_seq":216},"text":"7.0M/107.5M control: NetInfo: NetInfo{varies=true ipv6=false ipv6os=true udp=true icmpv4=false derp=#16 portmap= link=\"\" firewallmode=\"\"}\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:39.926220462Z","proc_id":3948624013,"proc_seq":217},"v":1,"text":"7.0M/107.5M control: PollNetMap: stream=false ep=[203.0.113.10:54175 203.0.113.10:54170 203.0.113.10:54166 192.168.1.50:42856 192.168.49.1:42856]\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:40.932193001Z","proc_id":3948624013,"proc_seq":218},"v":1,"text":"7.0M/107.5M control: successful lite map update in 1.008s\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:41.312212847Z","proc_id":3948624013,"proc_seq":219},"text":"7.1M/107.5M magicsock: derp-16 connected; connGen=1\n"}
+{"logtail":{"client_time":"2026-07-27T01:26:41.328295616Z","proc_id":3948624013,"proc_seq":220},"text":"7.1M/107.5M health(warnable=no-derp-connection): ok\n"}
+{"logtail":{"client_time":"2026-07-27T01:27:00.246561694Z","proc_id":3948624013,"proc_seq":221},"metrics":"I0202I0404I0604I080aI0a0aI0c0cI0e0aI100aI120aI1404I1814I1a0eI2002I2202I2a5aI2c5aI2e50I3202I3604I3804N20derp_home_changeS4002","text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=82) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:27:00.254742233Z","proc_id":3948624013,"proc_seq":222},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=78) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:27:00.254934156Z","proc_id":3948624013,"proc_seq":223},"text":"App: bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=82) -> true"}
+{"logtail":{"client_time":"2026-07-27T01:27:00.514444002Z","proc_id":3948624013,"proc_seq":224},"v":1,"text":"7.1M/107.5M netcheck: report: udp=true v6=false v6os=true mapvarydest=true portmap= v4a=203.0.113.10:54170 derp=16 derpdist=1v4:78ms,16v4:72ms,27v4:75ms\n"}
