@@ -29,7 +29,7 @@ compile time to **run time**. Watch for `NoSuchMethodError`, `NoClassDefFoundErr
 
 | Requirement | Why | Notes |
 |---|---|---|
-| **JDK 17** | AGP 8.1.4 targets it | **Not 21.** See [below](#jdk-17-is-not-optional) |
+| **JDK 17** | AGP targets it (8.6.1 on 1.98.8) | **Not 21.** See [below](#jdk-17-is-not-optional) |
 | **Android SDK** | `platforms;android-34`, `build-tools;34.0.0`, `cmdline-tools` | script installs what's missing |
 | **NDK 23.1.7779620** | cgo cross-compile for `armeabi-v7a` | ~1 GB; exact version required |
 | **Go** (any recent) | bootstraps Tailscale's pinned toolchain | system Go is only used to fetch the pinned one |
@@ -52,7 +52,7 @@ sudo apt install -y openjdk-17-jdk golang-go git curl unzip
 
 ### JDK 17 is not optional
 
-AGP 8.1.4 officially supports JDK 17; JDK 21 support arrived in AGP 8.2. Building with 21
+AGP officially supports JDK 17; JDK 21 support is inconsistent across the 8.x line. Building with 21
 typically fails deep into the Gradle run with an opaque Kotlin or Jetifier error, after
 you've already paid for the whole download. The build script refuses to start on the wrong
 JDK rather than let you discover this twenty minutes in.
@@ -76,7 +76,7 @@ Override anything via environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TS_REF` | `1.64.0-t78dc8622d-gfd2ca6fa940` | upstream tag or commit to build |
+| `TS_REF` | `1.98.8-t1241b225b-gbcbaf1889` | upstream tag or commit to build |
 | `MIN_SDK` | `22` | API floor; patched into Gradle **and** gomobile |
 | `GOMOBILE_TARGET` | `android/arm` | `android` for all ABIs (slower, larger) |
 | `ANDROID_SDK_ROOT` | `~/Library/Android/sdk` (mac), `~/Android/Sdk` (linux) | SDK location |
@@ -86,14 +86,14 @@ Override anything via environment variables:
 
 ### Choosing `TS_REF`
 
-| Ref | UI | Notes |
+| Ref | Patches needed | Notes |
 |---|---|---|
-| `3926cf4b56` | **stubs** | renders, but Connect is inert and Settings is a placeholder. Historical interest only |
-| **`1.64.0-…`** | complete | **default.** Earliest finished Compose UI → least API-26 creep |
-| `1.68.0-…` / `1.76.2-…` / `1.78.0-…` | complete | newer; 1.78.0 adds *"don't show permissions for TV"*, but more API-26 exposure |
+| `3926cf4b56` | — | renders, but screens are stubs. Historical interest only |
+| `1.64.0-…` | 1 | complete UI, 2024-era Go core |
+| **`1.98.8-…`** | 7 | **default.** Current stable; patch set lives in `patches/1.98.8/` |
 
-If 1.64.0 hits a runtime `NoSuchMethodError`, try a *newer* ref (bug may be fixed) or
-raise `MIN_SDK` and accept the device is out of reach.
+Patches are per-ref (`patches/<ref>/`). Building a ref with no patch directory will hit the
+API-22 bugs listed in STATUS.md — expect `NoSuchMethodError` / `NoClassDefFoundError`.
 
 ## What it does
 
@@ -107,8 +107,9 @@ raise `MIN_SDK` and accept the device is out of reach.
    `local.properties` stub, without which `getLocalProperty()` breaks configuration.
 6. **Builds the native library** — auto-detects the recipe: `gomobile bind` against
    `./libtailscale` on 1.64.0+, or legacy `gogio` on older refs. One ABI, not four.
-7. **Assembles the APK** — picks `assembleFdroidDebug` or `assembleDebug` depending on
-   whether the ref still has flavors, and skips the `test` task.
+7. **Generates `tailscale.version`** (1.78.0+ read it at configuration time) and assembles
+   the APK — `assembleFdroidDebug` or `assembleDebug` depending on whether the ref still
+   has flavors — skipping the `test` task.
 8. **Verifies** with `scripts/verify-apk.py`, which hard-fails on `minSdk` too high or a
    missing ABI. A rejected artifact is deleted rather than written to `dist/`.
 
@@ -189,8 +190,8 @@ Gradle picked up the wrong module. The APK must come from `android/`, not
 
 ## Reproducibility
 
-Pinned: the upstream commit (full SHA), the Go toolchain (via upstream's `printdep`), the
-NDK version, `compileSdk 34`, and AGP 8.1.4.
+Pinned: the upstream commit (full SHA), the Go toolchain (via upstream's `tool/go`), the
+NDK version, `compileSdk 34`, and the per-ref patch series.
 
 Not pinned: Gradle's transitive dependency resolution, and the debug signing key — Android
 generates a random `~/.android/debug.keystore` per machine. **Two builds on different
