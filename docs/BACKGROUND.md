@@ -82,9 +82,57 @@ Developed and verified on:
 | Display | 1920x1080 @ 320 dpi |
 | RAM | 895 MB |
 
-**Should also apply to** any Fire OS 5 device reporting API 22 and GLES 2.0 — Fire TV Stick
-1st gen (`AFTB`), Fire TV 1st/2nd gen (`AFTB`/`AFTS`). Untested; please open an issue with
-`scripts/device-check.sh` output if you try one.
+### What actually gates it
 
-**Not needed for** Fire TV devices released after 2018 — Fire OS 6+ / Android 7+ with GLES 3
-hardware. Use the [official client](https://tailscale.com/docs/install/amazon-fire).
+Nothing here is Amazon-specific. Two things decide whether this build runs:
+
+| | |
+|---|---|
+| **API 22–25** | 22 is this build's floor; at 26+ the [official client](https://tailscale.com/docs/install/android) installs, so use that instead |
+| **`armeabi-v7a`** | the published APKs are single-ABI. arm64 devices accept v7a; a v7a-less device needs `GOMOBILE_TARGET=android/arm64 ./scripts/build.sh` |
+
+GLES 2.0 is *not* a third gate — Compose is happy on either. It only decides **which
+problem you had**: on GLES 2.0 nothing worked at all, while on GLES 3 hardware below API 26
+the last Gio release (1.62.0) did render, so what this build buys is two years of fixes.
+
+### Amazon Fire devices
+
+The official client requires **Android 8.0 / API 26**, which leaves out every Fire OS 5
+device (API 22) *and* every Fire OS 6 one (API 25) — all of them 32-bit `armeabi-v7a`
+([Amazon device specs](https://developer.amazon.com/docs/device-specs/device-specifications.html),
+[Fire OS versions](https://developer.amazon.com/docs/fire-tv/fire-os-overview.html)):
+
+| | API | GLES | |
+|---|---|---|---|
+| **Fire TV Stick 2nd gen** — `AFTT` / `tank` | 22 | **2.0** | verified above |
+| Fire TV Stick 1st gen — `AFTM` / `montoya` | 22 | **2.0** | VideoCore IV; same double failure as `AFTT` |
+| Fire 7 tablet (2017, 7th gen) | 22 | **2.0** | Mali-450 MP4 |
+| Fire tablet (2015, 5th gen) | 22 | **2.0** | Mali-450 |
+| Fire TV 1st gen — `AFTB` / `bueller` | 22 | 3.0 | Adreno 320 — API floor only |
+| Fire TV 2nd gen — `AFTS` / `sloane` | 22 | 3.0 | PowerVR GX6250 |
+| Fire HD 6/7 (2014), Fire HD 8/10 (2015–2017) | 22 | 3.0–3.1 | PowerVR / Mali-T720 |
+| Fire OS 6 — `AFTN`, Cube 1st gen, Stick 4K 1st gen, Fire TV Edition sets | 25 | 3.x | |
+
+**Not needed for** Fire OS 7 and later (API 28+) — Fire TV Stick 3rd gen, Stick 4K 2nd gen,
+2020-and-later tablets. Use the [official client](https://tailscale.com/docs/install/amazon-fire).
+
+### Non-Amazon devices
+
+Any Android 5.1–7.1 device is in range, and cheap 2015–2016 hardware often lands in the
+GLES 2.0 class as well — ARM's Utgard GPUs (**Mali-400 / Mali-450**) never supported
+GLES 3, so those are the `AFTT` case exactly:
+
+| | |
+|---|---|
+| Samsung Galaxy J3 (2016) — `SM-J320H`, `SM-J320F` | Android 5.1.1, Spreadtrum SC8830/SC9830, **Mali-400 MP2**, v7a |
+| Amlogic S805 TV boxes (MXQ and its clones) | Android 5.1, **Mali-450**, v7a — abandoned by their vendors in 2016 |
+| Budget Allwinner / Rockchip tablets of the same era | commonly Android 5.1 with a Mali-400-class GPU |
+
+> [!NOTE]
+> Sibling model numbers are not interchangeable. The US Galaxy J3 (2016) shipped an
+> Exynos 3475 with a Mali-T720 (GLES 3.1) instead, and some J3 variants later took an
+> Android 6/7 update — still inside API 22–25, so this build applies either way, but check
+> the device rather than the marketing name.
+
+Everything outside the verified row is **untested**. Please open an issue with
+`scripts/device-check.sh` output if you try one.
