@@ -8,10 +8,28 @@ Read this first, then [FINDINGS.md](FINDINGS.md) for the evidence behind each cl
 
 ## One-line summary
 
-Tailscale **1.98.8** (current stable) builds and runs on Fire OS 5 / API 22 with three
-patches — it installs, renders, logs in, and brings up a tunnel — but it **cannot stay
-reachable on the tailnet** because `IPNService.bindSocketToNetwork()` fails on Android 5.1.
-That is the open blocker.
+Tailscale **1.98.8** (current stable) runs on Fire OS 5 / API 22 with **four patches**.
+It installs, renders, logs in, brings up a tunnel, connects to DERP, and shows **online**
+on the tailnet with no health warnings. One bug remains: **the peer list renders empty**,
+so the exit-node picker has nothing to choose from.
+
+### ✅ Socket binding — FIXED (patch 0004)
+
+`bindSocketToNetwork()` failed on API 22 for two reasons: the `NetworkRequest` callback
+never fires (so `cachedDefaultNetwork` was permanently null), and
+`Network.bindSocket(FileDescriptor)` is API 23 anyway. Fixed by falling back to
+`VpnService.protect(fd)` (API 14), the platform's own mechanism for keeping a VPN app's
+sockets outside its tunnel. Confirmed on hardware:
+
+```
+bindSocketToActiveNetwork: API 22 < 23; VpnService.protect(fd=78) -> true
+derphttp.Client.Recv: connecting to derp-16 (mia)
+derp-16 connected; connGen=1     derp=16 derpdist=16v4:72ms
+health(warnable=no-derp-connection): ok      health: Health updated: null
+```
+
+This resolved three of the four symptoms: the relay warning, the device showing offline,
+and the health icon.
 
 ## What works
 
@@ -25,39 +43,55 @@ That is the open blocker.
 | Login | ✅ completes, profile persists |
 | Tunnel comes up | ✅ `tun0`, `100.64.0.10`, `fd7a:115c:a1e0::d636:597b` |
 | Settings / exit-node screens | ✅ render; prefs writes succeed |
+| **DERP relay** | ✅ derp-16 (mia) connected, ~72 ms |
+| **Online on the tailnet** | ✅ no "offline" marker, health warnings clear |
+| **Peer list / exit-node choices** | ❌ **open — renders empty** |
 
-## The open blocker
+## The open blocker: peer list renders empty
 
-```
-[unexpected] IPNService.bindSocketToNetwork(53) returned false
-App: bindSocketToActiveNetwork: no cached default network; noop
-```
+**Corrected assumption.** The empty peer list was previously assumed to be downstream of
+the socket-binding fault. It is not — it survives with DERP connected and the node online,
+so it is an independent bug.
 
-Tailscale binds its own sockets to the underlying network so its traffic escapes the
-tunnel. On API 22 this fails repeatedly — no default network is ever cached, so outbound
-sockets go unbound.
-
-**Every remaining symptom is downstream of this single fault:**
-
-| Symptom | Why |
-|---|---|
-| Health warning "could not connect to the 'Miami' relay server" | DERP socket cannot bind |
-| Control plane shows the device **offline, last seen Nm ago** | connection cannot be held |
-| Device list empty in the UI | netmap never fully arrives |
-| Exit node absent from the picker | no peers ⇒ nothing to list |
-
-The exit node was never missing. `exit-node-host` **is** in the netmap — proven by the
-Go-side log:
+The Go layer has the peers. Proven by the Go-side log, *after* the fix:
 
 ```
 wgcfg: skipped unselected exit nodes from 1 nodes: exit-node-host (nXXXXXXXXXXXCNTRL)
+wgcfg: skipped expired peers from 1 nodes: desktop-a (nYYYYYYYYYYYCNTRL)
 ```
 
-("skipped unselected" is normal: an exit node you have not chosen.)
+("skipped unselected" is normal — an exit node you have not chosen.) But the UI shows no
+devices and the exit-node picker lists none.
 
-This is **not** a missing version guard. `ConnectivityManager` network-binding behaves
-differently on API 22, in the code path that keeps the client reachable. Fixing it means
-reworking network binding for an API level upstream dropped in 2024.
+### Where to look
+
+`PeerCategorizer.regenerateGroupedPeers()` in `ui/util/PeerHelper.kt`:
+
+```kotlin
+fun regenerateGroupedPeers(netmap: Netmap.NetworkMap) {
+    val peers: List<Tailcfg.Node> = netmap.Peers ?: return   // ← silent bail
+```
+
+If the Kotlin-side `netmap.Peers` is null, every peer-derived list is empty with **no
+exception** — which matches: logcat shows no `kotlinx.serialization` errors at all.
+
+Prime suspect: the Go→Kotlin netmap JSON bridge. `Notifier` deserialises the netmap into
+`Netmap.NetworkMap`; if `Peers` fails to populate (field-name mismatch, or the notify mask
+not requesting peers), everything downstream is empty and silent.
+
+Note the ordering seen in logs — `ExitNodePickerViewModel: Created` at `00:14:45`, netmap
+arriving `00:14:49` — so also worth ruling out a flow-collection race where the UI never
+recomposes on a late netmap.
+
+### Next steps
+
+1. Add a temporary `TSLog.d` in `regenerateGroupedPeers` logging `netmap.Peers?.size` and
+   whether `netmap` itself is null. One rebuild answers whether it is a null-Peers problem
+   or a never-called problem.
+2. If `Peers` is null: dump the raw notify JSON at the `Notifier` boundary and compare
+   against `Netmap.NetworkMap`'s `@Serializable` fields.
+3. If `regenerateGroupedPeers` is never called: the netmap flow is not reaching the UI —
+   look at `Notifier.netmap` collection and the notify mask.
 
 ## Reading the Go-side logs — the key technique
 
@@ -82,6 +116,7 @@ Applied automatically by `build.sh`; it hard-fails if one does not apply.
 | `0001-guard-NotificationChannel-api26` | `NotificationChannel` is API 26 | 1 |
 | `0002-guard-QuickToggleService-api24` | `QuickToggleService : TileService` is API 24 | 2 |
 | `0003-guard-foreground-service-api26` | `getForegroundService` / `startForegroundService` | 2 |
+| `0004-protect-socket-fallback-api22` | `Network.bindSocket` is API 23 → `VpnService.protect(fd)` | 1 + service instance tracking |
 
 `0001` must keep `notificationManager = NotificationManagerCompat.from(this)` **outside**
 the guard — it is a `lateinit` that `notifyStatus()` needs, and guarding it too yields
@@ -111,18 +146,29 @@ would fix the crash — but the worker would still fail, because it needs peers.
 
 ## If resuming — next steps in order
 
-1. **Instrument `bindSocketToActiveNetwork`.** Find why no default network is cached on
-   API 22. `App.kt` / `IPNService.kt`; look at the `ConnectivityManager` callback that
-   populates it — `NetworkCallback` registration differs pre-API 23
-   (`registerDefaultNetworkCallback` is API 24).
-2. If a default network can be cached, re-test: DERP should connect, the device should
-   go online, peers should populate, and the exit node should appear — all four together.
-3. Only then revisit the `USE_EXIT_NODE` worker crash (patch 4), if the UI still needs
-   bypassing.
-4. `TS_DEBUG_TLS_DIAL` remains untried. The system CA store cannot validate DERP's chain
+1. **Instrument `regenerateGroupedPeers`** — see "The open blocker" above. One rebuild
+   distinguishes null-`Peers` from never-called.
+2. Depending on the answer, chase the notify JSON bridge or the flow collection.
+3. Optional: patch 0005 for the `USE_EXIT_NODE` worker crash, if bypassing the UI is still
+   wanted once the picker works.
+4. Optional: fix `NetworkChangeCallback` so a real network gets cached — `protect()` works
+   but pins to nothing, which is weaker than `bindSocket` on a multi-uplink device.
+5. `TS_DEBUG_TLS_DIAL` remains untried. The system CA store cannot validate DERP's chain
    (`tls=20`; chain now ends at ISRG Root X2 / Root YE), but Tailscale bakes X1+X2 in and
    the fallback is compiled in, so this is believed **not** to be the cause. Unverified at
    runtime — worth ruling out if binding turns out to be a red herring.
+
+## Gotcha: poison-pill work items
+
+The `USE_EXIT_NODE` broadcast persists a WorkManager job that crashes the app on **every**
+start (`CoroutineWorker.getForegroundInfo: Not implemented`). Clear it without losing the
+login:
+
+```sh
+adb shell run-as com.tailscale.ipn rm -f databases/androidx.work.workdb*
+```
+
+`files/profile-data` holds the Tailscale login and is untouched by this.
 
 ## Fallback that needs no code
 
