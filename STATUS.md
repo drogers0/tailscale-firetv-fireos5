@@ -24,6 +24,7 @@ On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
 | Peer list | ✅ `Peers=6`, grouped by user |
 | **Exit node** | ✅ **`exit-node-host.othernet.ts.net`** |
 | **Traffic through exit node** | ✅ **1 MB download → 1,113,884 bytes over `tun0`** |
+| Survives reboot | ❌ VPN does not auto-start — see below |
 
 > **Measuring exit-node routing:** public egress IP is useless here — the exit node's owner
 > shares the household connection, so stick and laptop report the same IP. Use the byte
@@ -34,6 +35,20 @@ On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
 > adb shell curl -s -o /dev/null -w '%{size_download}\n' http://speedtest.tele2.net/1MB.zip
 > adb shell cat /sys/class/net/tun0/statistics/rx_bytes
 > ```
+
+## Reboot behaviour
+
+**The VPN does not come up by itself after a reboot.** The app process is started (by
+WorkManager's `RescheduleReceiver`) but no tunnel is established.
+
+This is upstream behaviour, not a patch gap: Tailscale's Android manifest declares **no
+`BOOT_COMPLETED` receiver** — the `RECEIVE_BOOT_COMPLETED` permission comes from
+WorkManager. Upstream relies on Android's **always-on VPN**, which is API 24+ and
+unavailable here (`settings get secure always_on_vpn_app` returns `null` on Fire OS 5).
+
+**Workaround:** open the Tailscale app once after a reboot. Everything else persists —
+login, chosen exit node, prefs. Verified: after a cold boot, launching the app restored the
+tunnel and exit-node routing (1,116,625 bytes over `tun0`) with no reconfiguration.
 
 ## Build
 
