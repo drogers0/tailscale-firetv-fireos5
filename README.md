@@ -22,7 +22,7 @@ Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5:
 | Online to control plane, health clear | ✅ |
 | Peer list | ✅ |
 | **Exit-node routing** | ✅ 1 MB download → **1,113,884 bytes over `tun0`** |
-| Auto-start after reboot | ❌ open the app once; see [STATUS.md](docs/STATUS.md) |
+| Auto-start after reboot | Added for API 22–23; tested on SH-01J with the network recovery patch. See [verification limits](docs/BOOT_RECOVERY.md#verification) |
 
 ## Quick start
 
@@ -43,7 +43,7 @@ adb install -r dist/tailscale-fireos5-*.apk
 
 | | |
 |---|---|
-| [docs/STATUS.md](docs/STATUS.md) | what works, the seven patches, verification method, gotchas |
+| [docs/STATUS.md](docs/STATUS.md) | what works, patches, verification method, gotchas |
 | [docs/BUILD.md](docs/BUILD.md) | prerequisites, build, troubleshooting, reproducibility |
 | [docs/DEVICES.md](docs/DEVICES.md) | which hardware this is for — every Fire TV and Fire tablet model, plus non-Amazon devices |
 | [docs/BACKGROUND.md](docs/BACKGROUND.md) | why the gap exists, why 1.98.8 |

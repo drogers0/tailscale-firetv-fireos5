@@ -1,9 +1,9 @@
 # Status — WORKING
 
-Last updated 2026-07-26.
+Last updated 2026-10-04.
 
 Tailscale **1.98.8** (current stable) runs on **Fire OS 5 / Android 5.1 / API 22** with
-seven patches, and **routes traffic through an exit node**.
+compatibility patches, and **routes traffic through an exit node**.
 
 ---
 
@@ -24,7 +24,7 @@ On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
 | Peer list | ✅ `Peers=6`, grouped by user |
 | **Exit node** | ✅ **`exit-node-host.othernet.ts.net`** |
 | **Traffic through exit node** | ✅ **1 MB download → 1,113,884 bytes over `tun0`** |
-| Survives reboot | ❌ VPN does not auto-start — see below |
+| Survives reboot | Added for API 22–23; SH-01J verified with the network recovery patch, Fire TV verification pending |
 
 > [!TIP]
 > **Measuring exit-node routing:** public egress IP is an unreliable check — if the exit
@@ -40,18 +40,15 @@ On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
 
 ## Reboot behaviour
 
-**The VPN does not come up by itself after a reboot.** The app process is started (by
-WorkManager's `RescheduleReceiver`) but no tunnel is established.
+Android 5.1–6 lacks the system's always-on VPN feature. Patch 0008 adds a boot receiver
+that restores the saved connection when `WantRunning` is true and VPN permission is
+still granted. A saved manual disconnect remains disconnected after reboot.
 
-This is upstream behaviour, not a patch gap: Tailscale's Android manifest declares **no
-`BOOT_COMPLETED` receiver** — the `RECEIVE_BOOT_COMPLETED` permission comes from
-WorkManager. Upstream relies on Android's **always-on VPN**, which is API 24+ and
-unavailable here (`settings get secure always_on_vpn_app` returns `null` on Fire OS 5).
+Pending preference reads are invalidated by later service commands or shutdown, so an
+old restore request cannot override a newer stop. Android 7+ continues to use the
+system's always-on VPN startup.
 
-> [!TIP]
-> **Workaround:** open the Tailscale app once after a reboot. Everything else persists —
-> login, chosen exit node, prefs. Verified: after a cold boot, launching the app restored
-> the tunnel and exit-node routing (1,116,625 bytes over `tun0`) with no reconfiguration.
+See [boot recovery](BOOT_RECOVERY.md) for prerequisites and verification limits.
 
 ## Build
 
@@ -62,7 +59,7 @@ TS_REF=1.98.8-t1241b225b-gbcbaf1889 MIN_SDK=22 ./scripts/build.sh
 ~12 s incremental, a few minutes cold. Patches apply automatically; the build hard-fails
 if any does not.
 
-## The seven patches
+## Patches
 
 | # | Fixes | API |
 |---|---|---|
@@ -73,10 +70,12 @@ if any does not.
 | 0005 | netmap decode: `decodeFromString`, not `decodeFromStream` | ≤23 |
 | 0006 | drop `setExpedited` from `IPNReceiver` work requests | 31 |
 | 0007 | `coreLibraryDesugaring` for `java.time` | 26 |
+| 0008 | Restore a saved VPN after boot or service restart; respect manual stop and consent | 22–23 boot; all service restarts |
 
-Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
-these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
-API 24.
+Upstream runs at minSdk 26, so guards that became dead code were dropped over time. The
+original patches address missing guards, **except 0005**, which works around a platform
+bug Google fixed at API 24. Additional patches address runtime compatibility and
+recovery gaps on older Android releases.
 
 ### 0005 is the interesting one
 

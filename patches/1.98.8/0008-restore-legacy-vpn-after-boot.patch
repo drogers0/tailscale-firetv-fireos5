@@ -1,0 +1,220 @@
+diff --git a/android/src/main/AndroidManifest.xml b/android/src/main/AndroidManifest.xml
+index 9633e2b..53ee7ec 100644
+--- a/android/src/main/AndroidManifest.xml
++++ b/android/src/main/AndroidManifest.xml
+@@ -2,6 +2,7 @@
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:tools="http://schemas.android.com/tools">
+ 
++    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+     <uses-permission android:name="android.permission.INTERNET" />
+@@ -92,6 +93,12 @@
+             </intent-filter>
+         </activity>
+ 
++        <receiver android:name=".BootReceiver" android:exported="false">
++            <intent-filter>
++                <action android:name="android.intent.action.BOOT_COMPLETED" />
++            </intent-filter>
++        </receiver>
++
+         <receiver
+             android:name="IPNReceiver"
+             android:exported="true">
+diff --git a/android/src/main/java/com/tailscale/ipn/BootReceiver.kt b/android/src/main/java/com/tailscale/ipn/BootReceiver.kt
+new file mode 100644
+index 0000000..e456305
+--- /dev/null
++++ b/android/src/main/java/com/tailscale/ipn/BootReceiver.kt
+@@ -0,0 +1,25 @@
++// Copyright (c) Tailscale Inc & AUTHORS
++// SPDX-License-Identifier: BSD-3-Clause
++package com.tailscale.ipn
++
++import android.content.BroadcastReceiver
++import android.content.Context
++import android.content.Intent
++import android.net.VpnService
++import android.os.Build
++import com.tailscale.ipn.util.TSLog
++
++/** Older Android releases lack the system's always-on VPN startup. */
++class BootReceiver : BroadcastReceiver() {
++  override fun onReceive(context: Context, intent: Intent?) {
++    if (intent?.action != Intent.ACTION_BOOT_COMPLETED ||
++        Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) return
++    if (VpnService.prepare(context) != null) {
++      TSLog.d("BootReceiver", "VPN consent required; skipping automatic restore")
++      return
++    }
++    context.startService(Intent(context, IPNService::class.java).apply {
++      action = IPNService.ACTION_RESTORE_VPN
++    })
++  }
++}
+diff --git a/android/src/main/java/com/tailscale/ipn/IPNService.kt b/android/src/main/java/com/tailscale/ipn/IPNService.kt
+index 21696d6..33fbd60 100644
+--- a/android/src/main/java/com/tailscale/ipn/IPNService.kt
++++ b/android/src/main/java/com/tailscale/ipn/IPNService.kt
+@@ -9,10 +9,12 @@ import android.net.VpnService
+ import android.os.Build
+ import android.system.OsConstants
+ import com.tailscale.ipn.mdm.MDMSettings
++import com.tailscale.ipn.ui.localapi.Client
+ import com.tailscale.ipn.ui.model.Ipn
+ import com.tailscale.ipn.ui.notifier.Notifier
+ import com.tailscale.ipn.util.TSLog
+ import java.util.UUID
++import kotlinx.coroutines.cancel
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.flow.first
+@@ -25,6 +27,7 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+   private lateinit var app: App
+   val scope = CoroutineScope(Dispatchers.IO)
+   private var closed = false
++  private val restoreGate = VpnRestoreGate()
+ 
+   override fun id(): String {
+     return randomID
+@@ -43,8 +46,13 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+     runningInstance = this
+   }
+ 
+-  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
+-      when (intent?.action) {
++  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
++    val request = restoreGate.beginRequest()
++    return when (intent?.action) {
++        ACTION_RESTORE_VPN -> {
++          restoreSavedVPN(startId, request)
++          START_STICKY
++        }
+         ACTION_STOP_VPN -> {
+           app.setWantRunning(false)
+           close()
+@@ -86,22 +94,40 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+           START_STICKY
+         }
+         else -> {
+-          // This means that we were restarted after the service was killed
+-          // (potentially due to OOM).
+-          if (UninitializedApp.get().isAbleToStartVPN()) {
+-            showForegroundNotification()
+-            App.get()
+-            Libtailscale.requestVPN(this)
+-            START_STICKY
+-          } else {
+-            START_NOT_STICKY
+-          }
++          // Android may restart a killed service with a null intent.
++          restoreSavedVPN(startId, request)
++          START_STICKY
+         }
+       }
++  }
++
++  private fun restoreSavedVPN(startId: Int, request: Int) {
++    Client(scope).prefs { result ->
++      scope.launch(Dispatchers.Main) {
++        if (closed || !restoreGate.isCurrent(request)) return@launch
++        result.fold(
++            onSuccess = { prefs ->
++              if (restoreGate.shouldRestore(request, prefs.WantRunning, prepare(this@IPNService) == null)) {
++                TSLog.d(TAG, "Restoring saved VPN connection")
++                showForegroundNotification()
++                Libtailscale.requestVPN(this@IPNService)
++              } else {
++                TSLog.d(TAG, "Saved VPN is stopped or consent is missing; skipping restore")
++                stopSelfResult(startId)
++              }
++            },
++            onFailure = {
++              TSLog.e(TAG, "Cannot read saved VPN preferences: ${it.message}")
++              stopSelfResult(startId)
++            })
++      }
++    }
++  }
+ 
+   override fun close() {
+     if (closed) return
+     closed = true
++    restoreGate.beginRequest()
+     Notifier.setState(Ipn.State.Stopping)
+     disconnectVPN()
+     Libtailscale.serviceDisconnect(this)
+@@ -117,6 +143,7 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+     }
+     close()
+     updateVpnStatus(false)
++    scope.cancel()
+     super.onDestroy()
+   }
+ 
+@@ -239,6 +266,7 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+     // API < 23. Not a general-purpose accessor.
+     @Volatile @JvmStatic var runningInstance: IPNService? = null
+ 
++    const val ACTION_RESTORE_VPN = "com.tailscale.ipn.RESTORE_VPN"
+     const val ACTION_START_VPN = "com.tailscale.ipn.START_VPN"
+     const val ACTION_STOP_VPN = "com.tailscale.ipn.STOP_VPN"
+     const val ACTION_RESTART_VPN = "com.tailscale.ipn.RESTART_VPN"
+diff --git a/android/src/main/java/com/tailscale/ipn/VpnRestoreGate.java b/android/src/main/java/com/tailscale/ipn/VpnRestoreGate.java
+new file mode 100644
+index 0000000..8424cbb
+--- /dev/null
++++ b/android/src/main/java/com/tailscale/ipn/VpnRestoreGate.java
+@@ -0,0 +1,16 @@
++// Copyright (c) Tailscale Inc & AUTHORS
++// SPDX-License-Identifier: BSD-3-Clause
++package com.tailscale.ipn;
++
++/** Main-thread gate for asynchronous restoration of a saved VPN connection. */
++final class VpnRestoreGate {
++    private int generation;
++
++    int beginRequest() { return ++generation; }
++
++    boolean isCurrent(int request) { return request == generation; }
++
++    boolean shouldRestore(int request, boolean wantRunning, boolean prepared) {
++        return isCurrent(request) && wantRunning && prepared;
++    }
++}
+diff --git a/android/src/test/java/com/tailscale/ipn/VpnRestoreGateTest.java b/android/src/test/java/com/tailscale/ipn/VpnRestoreGateTest.java
+new file mode 100644
+index 0000000..659a6c4
+--- /dev/null
++++ b/android/src/test/java/com/tailscale/ipn/VpnRestoreGateTest.java
+@@ -0,0 +1,28 @@
++package com.tailscale.ipn;
++
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++public class VpnRestoreGateTest {
++    @Test public void resumesSavedConnectionWithConsent() {
++        VpnRestoreGate gate = new VpnRestoreGate();
++        int request = gate.beginRequest();
++        assertTrue(gate.shouldRestore(request, true, true));
++    }
++    @Test public void preservesManualDisconnect() {
++        VpnRestoreGate gate = new VpnRestoreGate();
++        int request = gate.beginRequest();
++        assertFalse(gate.shouldRestore(request, false, true));
++    }
++    @Test public void refusesRevokedConsent() {
++        VpnRestoreGate gate = new VpnRestoreGate();
++        int request = gate.beginRequest();
++        assertFalse(gate.shouldRestore(request, true, false));
++    }
++    @Test public void laterCommandInvalidatesPendingRecovery() {
++        VpnRestoreGate gate = new VpnRestoreGate();
++        int recovery = gate.beginRequest();
++        gate.beginRequest();
++        assertFalse(gate.shouldRestore(recovery, true, true));
++    }
++}
