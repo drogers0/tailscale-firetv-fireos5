@@ -17,7 +17,7 @@ set -euo pipefail
 
 # ---- pinned inputs ----------------------------------------------------------
 TS_REPO="https://github.com/tailscale/tailscale-android.git"
-# Current release covered by the API 22 patch set; see docs/BUILD.md.
+# Match the documented release and the available API-22 patch series.
 TS_REF="${TS_REF:-1.98.8-t1241b225b-gbcbaf1889}"
 NDK_VERSION="${NDK_VERSION:-23.1.7779620}"
 
@@ -122,47 +122,17 @@ else
 fi
 info "HEAD: $(git -C "$SRC" rev-parse HEAD)"
 
-# Resolve the patch set before resetting tracked files. Patch-added files are
-# untracked, so checkout alone cannot restore them for another build.
-PATCHDIR="$REPO_ROOT/patches/$TS_REF"
-[ -d "$PATCHDIR" ] || PATCHDIR="$REPO_ROOT/patches/${TS_REF%%-*}"
-PATCHES=()
-for p in "$PATCHDIR"/*.patch; do
-  [ -e "$p" ] || continue
-  PATCHES+=("$p")
-done
-
-# Unwind later patches first: they may modify files introduced by earlier ones.
-# Only reverse patches that match, leaving unrelated scratch files untouched.
-for ((i=${#PATCHES[@]}-1; i>=0; i--)); do
-  p="${PATCHES[i]}"
-  if git -C "$SRC" apply --reverse --check "$p" 2>/dev/null; then
-    git -C "$SRC" apply --reverse "$p"
-  fi
-done
-
-# If a patch-added source remains, rollback did not match the current checkout.
-# Stop before resetting tracked edits, and identify the conflicting source.
-# Git's NUL-delimited output preserves spaces, tabs, and quoted patch paths.
-for p in "$PATCHDIR"/*.patch; do
-  [ -e "$p" ] || continue
-  while IFS= read -r -d '' entry; do
-    path="${entry#*$'\t'}"
-    path="${path#*$'\t'}"
-    if { [ -e "$SRC/$path" ] || [ -L "$SRC/$path" ]; } &&
-        ! git -C "$SRC" --literal-pathspecs ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
-      die "cannot safely reset checkout: patch source '$path' remains after rollback; preserve local edits and restore the patch sources before rebuilding"
-    fi
-  done < <(git -C "$SRC" apply --numstat -z "$p")
-done
-
-# Reset tracked overrides; do not clean untracked files from the scratch checkout.
+# checkout alone leaves patch-added files that can block the next build.
+# Keep ignored build outputs and .gobin rather than discarding caches with -x.
 git -C "$SRC" checkout -q -- . 2>/dev/null || true
+git -C "$SRC" clean -fdq -e .gobin
 
 # ---- 3b. per-ref patches ----------------------------------------------------
 # Upstream runs at minSdk 26, so API-guard rot accumulates: calls to APIs newer
 # than 22 that upstream can never hit. Each patch here fixes one, and is scoped
 # to a single ref so it is obvious what diverges from upstream and why.
+PATCHDIR="$REPO_ROOT/patches/$TS_REF"
+[ -d "$PATCHDIR" ] || PATCHDIR="$REPO_ROOT/patches/${TS_REF%%-*}"
 if [ -d "$PATCHDIR" ]; then
   for p in "$PATCHDIR"/*.patch; do
     [ -e "$p" ] || continue
