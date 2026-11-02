@@ -31,7 +31,7 @@ git clone git@github.com:drogers0/tailscale-firetv-fireos5.git
 cd tailscale-firetv-fireos5
 
 ./scripts/device-check.sh <fire-stick-ip>:5555   # confirm API 22 + GLES 2.0
-./scripts/build.sh                               # see docs/BUILD.md for prerequisites
+make build                                       # see docs/BUILD.md for prerequisites
 adb install -r dist/tailscale-fireos5-*.apk
 ```
 

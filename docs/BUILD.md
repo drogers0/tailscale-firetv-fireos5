@@ -34,22 +34,22 @@ compile time to **run time**. Watch for `NoSuchMethodError`, `NoClassDefFoundErr
 | **JDK 17** | AGP targets it (8.6.1 on 1.98.8) | **Not 21.** See [below](#jdk-17-is-not-optional) |
 | **Android SDK** | `platforms;android-34`, `build-tools;34.0.0`, `cmdline-tools` | script installs what's missing |
 | **NDK 23.1.7779620** | cgo cross-compile for `armeabi-v7a` | ~1 GB; exact version required |
-| **Go** (any recent) | bootstraps Tailscale's pinned toolchain | system Go is only used to fetch the pinned one |
+| **Go** | only for legacy refs without `tool/go` | modern refs fetch Tailscale's pinned toolchain with `curl` |
 | **~5 GB disk** | SDK + NDK + Gradle caches | |
 | `git`, `curl`, `unzip` | | |
+| `shellcheck`, `python3` | `make check` | `brew install shellcheck` / `apt install shellcheck`. The `verify-apk` tests skip without an SDK `aapt2` |
 
 ### macOS
 
 ```sh
 brew install --cask temurin@17
-brew install go
 # Android SDK: Android Studio, or `brew install --cask android-commandlinetools`
 ```
 
 ### Debian / Ubuntu
 
 ```sh
-sudo apt install -y openjdk-17-jdk golang-go git curl unzip
+sudo apt install -y openjdk-17-jdk git curl unzip
 ```
 
 ### JDK 17 is not optional
@@ -63,18 +63,33 @@ Point it at the right one explicitly if you have several installed:
 
 ```sh
 # macOS
-export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export JAVA_HOME=$(/usr/libexec/java_home -F -v 17)
 # Linux
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ```
 
+With `JAVA_HOME` unset, the script tries `java_home -F -v 17`, then `~/.local/jdks/jdk-17*`,
+then the Debian path, and checks each candidate's major version itself: plain
+`java_home -v 17` silently returns another JDK when no 17 is registered.
+
 ## Build
 
 ```sh
-./scripts/build.sh
+make build
 ```
 
-Override anything via environment variables:
+The Make targets are thin wrappers around the scripts:
+
+| Target | Does |
+|---|---|
+| `make check` | shellcheck, `verify-apk` tests, and `scripts/build.sh --patch-only` (the series applies to `TS_REF`; needs only git) |
+| `make build` | full build of the armeabi-v7a APK into `dist/` |
+| `make build-emu` | the same for the local emulator ABI (arm64 on Apple Silicon, x86_64 elsewhere) |
+| `make lint` | build plus Android Lint, `NewApi` only |
+| `make clean` | removes `.build/` (or `WORKDIR`); `dist/` is kept |
+
+Tunables stay environment variables read by `scripts/build.sh`; `make build TS_REF=…` and
+`TS_REF=… make build` both work:
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -84,7 +99,9 @@ Override anything via environment variables:
 | `ANDROID_SDK_ROOT` | `~/Library/Android/sdk` (mac), `~/Android/Sdk` (linux) | SDK location |
 | `JAVA_HOME` | autodetected JDK 17 | |
 | `WORKDIR` | `.build` | scratch checkout, one dir per ref |
-| `SKIP_TESTS` | `1` | set `0` to run upstream unit tests |
+| `SKIP_TESTS` | `1` | set `0` to run upstream unit tests (debug variant) |
+| `LINT` | `0` | `1` runs Android Lint, `NewApi` only, with the series' `lint.xml` ignores |
+| `PATCH_SERIES` | empty | a directory under `patches/` that overrides the by-ref lookup |
 
 ### Choosing `TS_REF`
 
@@ -92,26 +109,31 @@ Override anything via environment variables:
 |---|---|---|
 | `3926cf4b56` | — | renders, but screens are stubs. Historical interest only |
 | `1.64.0-…` | 1 | complete UI, 2024-era Go core |
-| **`1.98.8-…`** | 10 | **default.** Current stable; patch set lives in `patches/1.98.8/` |
+| **`1.98.8-…`** | 11 | **default.** Current stable; patch set lives in `patches/1.98.8/` |
 
 Patches are per-ref (`patches/<ref>/`). Building a ref with no patch directory will hit the
 API-22 bugs listed in STATUS.md — expect `NoSuchMethodError` / `NoClassDefFoundError`.
 
 ## What it does
 
-1. **Preflight** — verifies JDK 17, Go and the SDK; refuses to start on the wrong JDK.
-2. **Installs missing SDK packages** via `sdkmanager` (NDK, platform-34, build-tools).
-3. **Shallow-fetches** the single ref — no history clone. Re-runs reset any prior patches
+1. **Shallow-fetches** the single ref — no history clone. Re-runs reset any prior patches
    so overrides always apply to pristine sources.
-4. **Go toolchain** — uses upstream's `tool/go` wrapper when present (it fetches
-   Tailscale's own pinned Go), otherwise falls back to system Go.
-5. **Applies the API-floor overrides** (both places, see above) and writes a
+2. **Applies the patch series** — `patches/<ref or version>/*.patch`, or the directory
+   named by `PATCH_SERIES`. A non-applying patch fails here, before any SDK download;
+   `--patch-only` stops here.
+3. **Preflight** — verifies JDK 17 and the SDK; refuses to start on the wrong JDK.
+4. **Installs missing SDK packages** via `sdkmanager` (NDK, platform-34, build-tools).
+5. **Go toolchain** — uses upstream's `tool/go` wrapper when present (it fetches
+   Tailscale's own pinned Go). A system Go is used only for legacy refs without it, and a
+   `tool/go` that yields no toolchain is fatal.
+6. **Applies the API-floor overrides** (both places, see above) and writes a
    `local.properties` stub, without which `getLocalProperty()` breaks configuration.
-6. **Builds the native library** — auto-detects the recipe: `gomobile bind` against
+   **Generates `tailscale.version`** (1.78.0+ read it at configuration time), then
+   **builds the native library** — auto-detects the recipe: `gomobile bind` against
    `./libtailscale` on 1.64.0+, or legacy `gogio` on older refs. One ABI, not four.
-7. **Generates `tailscale.version`** (1.78.0+ read it at configuration time) and assembles
-   the APK — `assembleFdroidDebug` or `assembleDebug` depending on whether the ref still
-   has flavors — skipping the `test` task.
+7. **Assembles the APK** — `assembleFdroidDebug` or `assembleDebug` depending on whether
+   the ref still has flavors — plus debug unit tests with `SKIP_TESTS=0`, and NewApi lint
+   with `LINT=1`.
 8. **Verifies** with `scripts/verify-apk.py`, which hard-fails on `minSdk` too high or a
    missing ABI — the one you targeted, or `armeabi-v7a` for a multi-ABI build. A rejected
    artifact is deleted rather than written to `dist/`.

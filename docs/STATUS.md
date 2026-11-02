@@ -70,7 +70,7 @@ if any does not.
 | # | Fixes | API |
 |---|---|---|
 | 0001 | `NotificationChannel`, unguarded in `App.onCreate()` | 26 |
-| 0002 | `QuickToggleService : TileService`, 2 call sites | 24 |
+| 0002 | `QuickToggleService : TileService`, 2 call sites; `@RequiresApi` so lint enforces the guards | 24 |
 | 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 |
 | 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 |
 | 0005 | netmap decode: `decodeFromString`, not `decodeFromStream` | ≤23 |
@@ -79,6 +79,7 @@ if any does not.
 | 0008 | `BOOT_COMPLETED` receiver, standing in for always-on VPN | 24 |
 | 0009 | `getActiveNetwork` in the VPN-conflict check → `getAllNetworks` below 23 | 23 |
 | 0010 | read the initial network state in `NetworkChangeCallback.onAvailable` | 26 |
+| 0011 | `Notification.Builder(Context, String)` in `StartVPNWorker` → `NotificationCompat` | 26 |
 
 Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
 these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
