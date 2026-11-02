@@ -77,6 +77,8 @@ if any does not.
 | 0006 | drop `setExpedited` from `IPNReceiver` work requests | 31 |
 | 0007 | `coreLibraryDesugaring` for `java.time` | 26 |
 | 0008 | `BOOT_COMPLETED` receiver, standing in for always-on VPN | 24 |
+| 0009 | `getActiveNetwork` in the VPN-conflict check → `getAllNetworks` below 23 | 23 |
+| 0010 | read the initial network state in `NetworkChangeCallback.onAvailable` | 26 |
 
 Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
 these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
@@ -109,8 +111,8 @@ pins 1.6.3.
 
 ### 0004 — the connectivity fix
 
-`bindSocketToNetwork()` failed two ways on API 22: the `NetworkRequest` callback never
-fires (`cachedDefaultNetwork` permanently null), and `Network.bindSocket(FileDescriptor)`
+`bindSocketToNetwork()` failed two ways on API 22: only `onAvailable` fires below API 26,
+so `cachedDefaultNetwork` stayed null (fixed by 0010), and `Network.bindSocket(FileDescriptor)`
 is API 23 regardless — a `NoSuchMethodError`, which the surrounding `catch (Exception)`
 would not have caught. Fixed with `VpnService.protect(fd)` (API 14), the platform's own
 mechanism for keeping a VPN app's sockets outside its tunnel. Upstream never needs it
@@ -220,6 +222,6 @@ Fire TV Stick 2nd gen — `AFTT` / `tank`, retail **LY73PR**, Fire OS 5.2.9.5, A
 
 Everything needed works. Optional polish:
 
-1. `NetworkChangeCallback` never fires on API 22, so `protect()` pins to nothing. Equivalent
-   on a single-uplink device; would matter on multi-uplink.
+1. Below API 23, 0004's `protect()` keeps sockets out of the tunnel but cannot pin them to
+   a network. Equivalent on a single-uplink device; would matter on multi-uplink.
 2. Launch is slow, 5-7 s to first frame, on this hardware.

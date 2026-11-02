@@ -1,0 +1,35 @@
+diff --git a/android/src/main/java/com/tailscale/ipn/NetworkChangeCallback.kt b/android/src/main/java/com/tailscale/ipn/NetworkChangeCallback.kt
+index 2919e4d..9b123b5 100644
+--- a/android/src/main/java/com/tailscale/ipn/NetworkChangeCallback.kt
++++ b/android/src/main/java/com/tailscale/ipn/NetworkChangeCallback.kt
+@@ -7,6 +7,7 @@ import android.net.LinkProperties
+ import android.net.Network
+ import android.net.NetworkCapabilities
+ import android.net.NetworkRequest
++import android.os.Build
+ import android.util.Log
+ import com.tailscale.ipn.util.TSLog
+ import java.util.concurrent.locks.ReentrantLock
+@@ -65,6 +66,22 @@ object NetworkChangeCallback {
+ 
+             TSLog.d(TAG, "onAvailable: network $network")
+ 
++            // Below API 26 a new listener gets only onAvailable: the follow-up
++            // onCapabilitiesChanged/onLinkPropertiesChanged are guaranteed from O.
++            // The empty placeholder below then never gains INTERNET, so no default
++            // network is picked and DNS falls back to Google. Read the current
++            // state directly instead (API 21).
++            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
++              val caps = connectivityManager.getNetworkCapabilities(network) ?: NetworkCapabilities()
++              val props = connectivityManager.getLinkProperties(network) ?: LinkProperties()
++              lock.withLock {
++                activeNetworks[network] = NetworkInfo(caps, props)
++                recomputeDefaultNetworkLocked("onAvailable")
++                maybeUpdateDNSConfig("onAvailable", dns)
++              }
++              return
++            }
++
+             lock.withLock {
+               activeNetworks[network] = NetworkInfo(NetworkCapabilities(), LinkProperties())
+               recomputeDefaultNetworkLocked("onAvailable")

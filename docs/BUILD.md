@@ -92,7 +92,7 @@ Override anything via environment variables:
 |---|---|---|
 | `3926cf4b56` | — | renders, but screens are stubs. Historical interest only |
 | `1.64.0-…` | 1 | complete UI, 2024-era Go core |
-| **`1.98.8-…`** | 8 | **default.** Current stable; patch set lives in `patches/1.98.8/` |
+| **`1.98.8-…`** | 10 | **default.** Current stable; patch set lives in `patches/1.98.8/` |
 
 Patches are per-ref (`patches/<ref>/`). Building a ref with no patch directory will hit the
 API-22 bugs listed in STATUS.md — expect `NoSuchMethodError` / `NoClassDefFoundError`.
