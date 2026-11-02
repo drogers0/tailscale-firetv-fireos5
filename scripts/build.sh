@@ -17,9 +17,8 @@ set -euo pipefail
 
 # ---- pinned inputs ----------------------------------------------------------
 TS_REPO="https://github.com/tailscale/tailscale-android.git"
-# 1.64.0 — earliest release with a complete Compose UI (settings, exit-node picker).
-# The earlier 3926cf4b56 renders but its screens are stubs; see docs/FINDINGS.md.
-TS_REF="${TS_REF:-1.64.0-t78dc8622d-gfd2ca6fa940}"
+# Match the documented release and the available API-22 patch series.
+TS_REF="${TS_REF:-1.98.8-t1241b225b-gbcbaf1889}"
 NDK_VERSION="${NDK_VERSION:-23.1.7779620}"
 
 # ---- tunables ---------------------------------------------------------------
@@ -123,8 +122,10 @@ else
 fi
 info "HEAD: $(git -C "$SRC" rev-parse HEAD)"
 
-# Reset to pristine sources so overrides and patches apply cleanly on re-runs.
+# checkout alone leaves patch-added files that can block the next build.
+# Keep ignored build outputs and .gobin rather than discarding caches with -x.
 git -C "$SRC" checkout -q -- . 2>/dev/null || true
+git -C "$SRC" clean -fdq -e .gobin
 
 # ---- 3b. per-ref patches ----------------------------------------------------
 # Upstream runs at minSdk 26, so API-guard rot accumulates: calls to APIs newer
