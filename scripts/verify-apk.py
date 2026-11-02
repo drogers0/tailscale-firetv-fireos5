@@ -38,12 +38,18 @@ def read_with_pyaxmlparser(path):
     }
 
 
+def version_key(path):
+    """Sort key for SDK dirs like build-tools/34.0.0 or platforms/android-36-ext19 by number."""
+    return [int(n) for n in re.findall(r"\d+", os.path.basename(path))]
+
+
 def find_aapt():
     roots = [os.environ.get("ANDROID_SDK_ROOT"), os.environ.get("ANDROID_HOME"),
              os.path.expanduser("~/Library/Android/sdk"), os.path.expanduser("~/Android/Sdk")]
     for root in filter(None, roots):
         for name in ("aapt2", "aapt"):
-            hits = sorted(glob.glob(os.path.join(root, "build-tools", "*", name)))
+            hits = sorted(glob.glob(os.path.join(root, "build-tools", "*", name)),
+                          key=lambda p: version_key(os.path.dirname(p)))
             if hits:
                 return hits[-1]
     return None

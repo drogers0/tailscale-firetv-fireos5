@@ -27,4 +27,5 @@ lint:
 
 # Remove upstream checkouts and build trees; dist/ is kept.
 clean:
-	rm -rf "$${WORKDIR:-.build}"
+	@case "$${WORKDIR:-.build}" in /*|*..*) echo "refusing to clean WORKDIR=$$WORKDIR" >&2; exit 1 ;; esac
+	rm -rf "./$${WORKDIR:-.build}"

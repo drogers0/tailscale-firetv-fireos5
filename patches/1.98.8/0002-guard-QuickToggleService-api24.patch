@@ -40,7 +40,7 @@ index a8053a4..b31166f 100644
 +import androidx.annotation.RequiresApi;
 +
 +// TileService is API 24+; the system never binds it below that, and App.kt guards
-+// its callers (0002). The annotation makes lint enforce those guards.
++// its callers. The annotation makes lint enforce those guards.
 +@RequiresApi(Build.VERSION_CODES.N)
  public class QuickToggleService extends TileService {
      // lock protects the static fields below it.

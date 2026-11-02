@@ -32,7 +32,8 @@ class VerifyApkTest(unittest.TestCase):
         jars = []
         if aapt and os.path.basename(aapt) == "aapt2":
             sdk = Path(aapt).parents[2]
-            jars = sorted(sdk.glob("platforms/*/android.jar"))
+            jars = sorted(sdk.glob("platforms/*/android.jar"),
+                          key=lambda p: verify_apk.version_key(str(p.parent)))
         if not jars:
             msg = "needs aapt2 and an android.jar from the Android SDK"
             if os.environ.get("CI"):
@@ -86,7 +87,8 @@ class VerifyApkTest(unittest.TestCase):
         self.assertIn("pure-Java", r.stdout)
 
     def test_any_failing_apk_fails_the_run(self):
-        r = self.verify(self.build_apk(22, ["armeabi-v7a"]), self.build_apk(26, ["armeabi-v7a"]))
+        # Failing APK first: catches both "first APK only" and "last APK wins" regressions.
+        r = self.verify(self.build_apk(26, ["armeabi-v7a"]), self.build_apk(22, ["armeabi-v7a"]))
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
 
 

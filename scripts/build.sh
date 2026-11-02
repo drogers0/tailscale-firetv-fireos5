@@ -42,7 +42,7 @@ bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-java_major() { "$1/bin/java" -version 2>&1 | head -1 | sed -E 's/.*"([0-9]+).*/\1/'; }
+java_major() { "$1/bin/java" -version 2>&1 | sed -nE 's/.* version "([0-9]+).*/\1/p' | head -1; }
 
 PATCH_ONLY=0
 case "${1:-}" in
@@ -52,7 +52,7 @@ case "${1:-}" in
 esac
 
 # gomobile/gogio arch name -> Android ABI directory name. Used for the artifact
-# filename and for the ABI assertion in step 11, so both follow what was built.
+# filename and for the ABI assertion in the verify step, so both follow what was built.
 abi_for() {
   case "$1" in
     arm)   echo armeabi-v7a ;;
@@ -79,9 +79,11 @@ fi
 
 # ---- 2. checkout ------------------------------------------------------------
 command -v git >/dev/null || die "git not found"
-if [ ! -d "$SRC/.git" ]; then
+# Reuse only a checkout that has a commit: a fetch that failed after `git init` would
+# otherwise be reused, and every patch would then fail as if upstream had drifted.
+if ! { [ -d "$SRC/.git" ] && git -C "$SRC" rev-parse -q --verify HEAD >/dev/null 2>&1; }; then
   info "Fetching $TS_REF (shallow)"
-  mkdir -p "$SRC"
+  rm -rf "$SRC"; mkdir -p "$SRC"
   git -C "$SRC" init -q
   git -C "$SRC" remote add origin "$TS_REPO" 2>/dev/null || true
   git -C "$SRC" fetch -q --depth 1 origin "$TS_REF"
@@ -128,7 +130,7 @@ for c in curl unzip; do command -v $c >/dev/null || die "$c not found"; done
 if [ -z "${JAVA_HOME:-}" ]; then
   for c in "$( [ "$(uname)" = Darwin ] && /usr/libexec/java_home -F -v 17 2>/dev/null )" \
            "$HOME"/.local/jdks/jdk-17*/Contents/Home "$HOME"/.local/jdks/jdk-17* \
-           /usr/lib/jvm/java-17-openjdk-amd64; do
+           /usr/lib/jvm/java-17-openjdk-*; do
     if [ -n "$c" ] && [ -x "$c/bin/java" ] && [ "$(java_major "$c")" = 17 ]; then JAVA_HOME="$c"; break; fi
   done
 fi
