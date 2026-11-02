@@ -65,7 +65,7 @@ abi_for() {
 
 # ---- 1. patch series --------------------------------------------------------
 # Resolved before any fetch, so a bad or missing series fails at once.
-info "Preflight  (ref=$TS_REF  minSdk=$MIN_SDK)"
+info "Build  (ref=$TS_REF  minSdk=$MIN_SDK)"
 if [ -n "$PATCH_SERIES" ]; then
   PATCHDIR="$REPO_ROOT/patches/$PATCH_SERIES"
   [ -d "$PATCHDIR" ] || die "no patch series patches/$PATCH_SERIES"
@@ -109,6 +109,7 @@ if [ -d "$PATCHDIR" ]; then
       info "Applied patch: $(basename "$p")"
       n=$((n+1))
     else
+      git -C "$SRC" apply --check -v "$p" >&2 || true   # show which file and hunk failed
       die "patch does not apply to $TS_REF: $(basename "$p")"
     fi
   done
@@ -128,7 +129,7 @@ if [ -z "${JAVA_HOME:-}" ]; then
   for c in "$( [ "$(uname)" = Darwin ] && /usr/libexec/java_home -F -v 17 2>/dev/null )" \
            "$HOME"/.local/jdks/jdk-17*/Contents/Home "$HOME"/.local/jdks/jdk-17* \
            /usr/lib/jvm/java-17-openjdk-amd64; do
-    if [ -x "$c/bin/java" ] && [ "$(java_major "$c")" = 17 ]; then JAVA_HOME="$c"; break; fi
+    if [ -n "$c" ] && [ -x "$c/bin/java" ] && [ "$(java_major "$c")" = 17 ]; then JAVA_HOME="$c"; break; fi
   done
 fi
 [ -n "${JAVA_HOME:-}" ] || die "JDK 17 not found. Set JAVA_HOME. See docs/BUILD.md."

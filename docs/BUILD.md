@@ -37,7 +37,7 @@ compile time to **run time**. Watch for `NoSuchMethodError`, `NoClassDefFoundErr
 | **Go** | only for legacy refs without `tool/go` | modern refs fetch Tailscale's pinned toolchain with `curl` |
 | **~5 GB disk** | SDK + NDK + Gradle caches | |
 | `git`, `curl`, `unzip` | | |
-| `shellcheck`, `python3` | `make check` | `brew install shellcheck` / `apt install shellcheck`. The `verify-apk` tests skip without an SDK `aapt2` |
+| `shellcheck`, `python3` | `make check` | `brew install shellcheck` / `apt install shellcheck`. The `verify-apk` tests skip without an SDK `aapt2` and platform (`android.jar`) |
 
 ### macOS
 
@@ -84,7 +84,7 @@ The Make targets are thin wrappers around the scripts:
 |---|---|
 | `make check` | shellcheck, `verify-apk` tests, and `scripts/build.sh --patch-only` (the series applies to `TS_REF`; needs only git) |
 | `make build` | full build of the armeabi-v7a APK into `dist/` |
-| `make build-emu` | the same for the local emulator ABI (arm64 on Apple Silicon, x86_64 elsewhere) |
+| `make build-emu` | the same for the local emulator ABI (arm64 on arm64 hosts, x86_64 elsewhere) |
 | `make lint` | build plus Android Lint, `NewApi` only |
 | `make clean` | removes `.build/` (or `WORKDIR`); `dist/` is kept |
 

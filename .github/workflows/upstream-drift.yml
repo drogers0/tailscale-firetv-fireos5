@@ -8,6 +8,7 @@ permissions:
 jobs:
   resolve:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       ts_ref: ${{ steps.r.outputs.ts_ref }}
       patch_series: ${{ steps.r.outputs.patch_series }}
@@ -20,9 +21,9 @@ jobs:
           # Assign first: a failing $(...) inside echo would not trip -e, and an empty ref
           # would silently test the pinned ref and close a real drift issue.
           ref="$(gh release view --repo tailscale/tailscale-android --json tagName --jq .tagName)"
-          series="$(cd patches && printf '%s\n' [0-9]*/ | tr -d / | sort -V | tail -1)"
+          series="$(cd patches && printf '%s\n' [0-9]*/ | tr -d / | grep -E '^[0-9]+(\.[0-9]+)+$' | sort -V | tail -1)"
           [ -n "$ref" ] || { echo "::error::no upstream release tag resolved"; exit 1; }
-          [ -d "patches/$series" ] || { echo "::error::no patch series under patches/"; exit 1; }
+          [ -n "$series" ] && [ -d "patches/$series" ] || { echo "::error::no patch series under patches/"; exit 1; }
           { echo "ts_ref=$ref"; echo "patch_series=$series"; } >> "$GITHUB_OUTPUT"
   tiers:
     needs: resolve
@@ -35,6 +36,7 @@ jobs:
     if: ${{ !cancelled() }}
     concurrency: { group: upstream-drift-report }   # overlapping runs must not both create an issue
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions: { issues: write }
     steps:
       - env:
