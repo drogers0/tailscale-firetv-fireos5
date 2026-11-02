@@ -1,0 +1,56 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]          # seeds caches PRs can read: setup-gradle saves only here, and
+                              # actions/cache entries saved from main are visible to every PR
+  workflow_call:              # upstream-drift.yml runs tiers 0+1 against another ref
+    inputs:
+      ts_ref:       { type: string, default: '' }
+      patch_series: { type: string, default: '' }
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:                          # empty on PR/push: build.sh falls back to its pinned defaults
+  TS_REF: ${{ inputs.ts_ref }}
+  PATCH_SERIES: ${{ inputs.patch_series }}
+jobs:
+  check:
+    name: Tier 0 · static checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - run: make check        # uses the image's SDK for aapt2; no JDK needed
+  build:
+    name: Tier 1 · build, NewApi lint, unit tests
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup-build
+        with:
+          cache-key: ${{ inputs.ts_ref && 'drift' || 'tier1' }}
+          save-sdk: 'true'     # the only writer of the shared SDK cache entry
+      - run: make build
+        env: { LINT: '1', SKIP_TESTS: '0' }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tailscale-fireos5-apk
+          path: |
+            dist/*.apk
+            dist/*.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gradle-reports
+          path: .build/*/android/build/reports/
+          if-no-files-found: ignore
+          retention-days: 14

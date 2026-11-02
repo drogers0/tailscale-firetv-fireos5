@@ -1,0 +1,7 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]   # composite action pins too
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
