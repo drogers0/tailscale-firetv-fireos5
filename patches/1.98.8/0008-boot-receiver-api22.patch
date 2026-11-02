@@ -1,0 +1,74 @@
+diff --git a/android/src/main/AndroidManifest.xml b/android/src/main/AndroidManifest.xml
+index 9633e2b..d6728f2 100644
+--- a/android/src/main/AndroidManifest.xml
++++ b/android/src/main/AndroidManifest.xml
+@@ -2,6 +2,8 @@
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:tools="http://schemas.android.com/tools">
+ 
++    <!-- Also merged in from WorkManager; declared here because BootReceiver needs it. -->
++    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+     <uses-permission android:name="android.permission.INTERNET" />
+@@ -92,6 +94,15 @@
+             </intent-filter>
+         </activity>
+ 
++        <!-- API < 24 has no always-on VPN; see BootReceiver.kt. -->
++        <receiver
++            android:name=".BootReceiver"
++            android:exported="false">
++            <intent-filter>
++                <action android:name="android.intent.action.BOOT_COMPLETED" />
++            </intent-filter>
++        </receiver>
++
+         <receiver
+             android:name="IPNReceiver"
+             android:exported="true">
+diff --git a/android/src/main/java/com/tailscale/ipn/BootReceiver.kt b/android/src/main/java/com/tailscale/ipn/BootReceiver.kt
+new file mode 100644
+index 0000000..036ee76
+--- /dev/null
++++ b/android/src/main/java/com/tailscale/ipn/BootReceiver.kt
+@@ -0,0 +1,39 @@
++// Copyright (c) Tailscale Inc & AUTHORS
++// SPDX-License-Identifier: BSD-3-Clause
++package com.tailscale.ipn
++
++import android.content.BroadcastReceiver
++import android.content.Context
++import android.content.Intent
++import android.net.VpnService
++import android.os.Build
++import com.tailscale.ipn.ui.localapi.Client
++
++// Reconnects the VPN after a reboot on API < 24.
++//
++// Upstream declares no BOOT_COMPLETED receiver: it relies on Android's always-on
++// VPN to start IPNService at boot, and always-on VPN is API 24+. Below that nothing
++// starts the tunnel, so it stays down until the app is opened.
++//
++// Only reconnect if the user left it connected (WantRunning) and VPN consent is
++// still granted; a manual disconnect stays disconnected. startVPN() is the same
++// path the UI's connect button takes. On API 24+ this is a no-op and always-on
++// VPN stays in charge.
++class BootReceiver : BroadcastReceiver() {
++  override fun onReceive(context: Context, intent: Intent) {
++    if (intent.action != Intent.ACTION_BOOT_COMPLETED ||
++        Build.VERSION.SDK_INT >= Build.VERSION_CODES.N ||
++        VpnService.prepare(context) != null) {
++      return
++    }
++    val app = App.get()
++    val pending = goAsync()
++    Client(app.applicationScope).prefs { result ->
++      try {
++        if (result.getOrNull()?.WantRunning == true) app.startVPN()
++      } finally {
++        pending.finish()
++      }
++    }
++  }
++}
