@@ -14,11 +14,11 @@ ADB=(adb)
 
 command -v adb >/dev/null || { echo "error: adb not found" >&2; exit 1; }
 
-if [ -n "$TARGET" ] && ! adb devices | grep -q "^$TARGET[[:space:]]*device$"; then
+if [ -n "$TARGET" ] && ! adb devices | grep -q "^${TARGET}[[:space:]]*device$"; then
   echo "connecting to $TARGET ..."
   adb connect "$TARGET" >/dev/null 2>&1
   sleep 2
-  adb devices | grep -q "^$TARGET[[:space:]]*device$" || {
+  adb devices | grep -q "^${TARGET}[[:space:]]*device$" || {
     echo "error: $TARGET is not an authorized device." >&2
     echo "       If it shows 'unauthorized', accept the debugging prompt on the TV." >&2
     exit 1
