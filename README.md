@@ -22,7 +22,7 @@ Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5:
 | Online to control plane, health clear | ✅ |
 | Peer list | ✅ |
 | **Exit-node routing** | ✅ 1 MB download → **1,113,884 bytes over `tun0`** |
-| Auto-start after reboot | Added for API 22–23; tested on SH-01J with the network recovery patch. See [verification limits](docs/BOOT_RECOVERY.md#verification) |
+| Auto-start after reboot | ⚠️ patch 0008, unverified on Fire TV; see [STATUS.md](docs/STATUS.md#reboot-behaviour) |
 
 ## Quick start
 
