@@ -243,7 +243,7 @@ pass "0002 launch without missing-API errors; 0010 default network $(default_net
 wait_for 30 "the VPN consent dialog" focused "com.android.vpndialogs/.ConfirmDialog"
 tap_text Cancel                                   # this dialog ignores the back key
 wait_log "0009 consent denial handled" "VpnPermission: Permission was denied by the user"
-wait_for 15 "0009 'VPN permission needed' dialog" ui_has "VPN permission needed XX"
+wait_for 15 "0009 'VPN permission needed' dialog" ui_has "VPN permission needed"
 pass "0009 consent denied: 'VPN permission needed', no crash"
 tap_text Cancel
 
