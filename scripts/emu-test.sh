@@ -170,8 +170,8 @@ tap_text() {   # tap the centre of the first node whose text is one of the argum
 }
 notified() { adb shell dumpsys notification | grep -E "NotificationRecord\(.*pkg=$PKG .*flags=0x10 " >/dev/null; }
 ipn_foreground() {
-  adb shell dumpsys activity services "$PKG/.IPNService" | awk '
-    /ServiceRecord\{.*com\.tailscale\.ipn\/\.IPNService/ { f = 1; next }
+  adb shell dumpsys activity services "$PKG/.IPNService" | awk -v svc="$PKG/.IPNService" '
+    /ServiceRecord\{/ && index($0, svc) { f = 1; next }
     /ServiceRecord\{/ { f = 0 }
     f && /isForeground=true/ { ok = 1 }
     END { exit !ok }'
@@ -208,7 +208,7 @@ finish() {
   if [ -n "${EMU_PID:-}" ] && kill -0 "$EMU_PID" 2>/dev/null; then
     adb emu kill >/dev/null 2>&1 || kill "$EMU_PID" 2>/dev/null || true
     for _ in $(seq 30); do kill -0 "$EMU_PID" 2>/dev/null || break; sleep 1; done
-    kill -9 "$EMU_PID" 2>/dev/null || true   # still up after 30 s
+    if kill -0 "$EMU_PID" 2>/dev/null; then kill -9 "$EMU_PID" 2>/dev/null || true; fi   # still up after 30 s
     wait "$EMU_PID" 2>/dev/null || true
   fi
   exit "$rc"

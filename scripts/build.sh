@@ -22,8 +22,9 @@ set -euo pipefail
 TS_REPO="https://github.com/tailscale/tailscale-android.git"
 # Match the documented release and the available API-22 patch series.
 TS_REF="${TS_REF:-1.98.8-t1241b225b-gbcbaf1889}"
+# SDK packages, the NDK included; CI keys its SDK cache on these four NAME= lines
+# (.github/actions/setup-build).
 NDK_VERSION="${NDK_VERSION:-23.1.7779620}"
-# SDK packages; CI keys its SDK cache on these four NAME= lines (.github/actions/setup-build).
 CMDLINE_TOOLS=9477386
 SDK_PLATFORM=android-34
 BUILD_TOOLS=34.0.0

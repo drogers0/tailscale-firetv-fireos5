@@ -32,7 +32,7 @@ compile time to **run time**. Watch for `NoSuchMethodError`, `NoClassDefFoundErr
 | Requirement | Why | Notes |
 |---|---|---|
 | **JDK 17** | AGP targets it (8.6.1 on 1.98.8) | **Not 21.** See [below](#jdk-17-is-not-optional) |
-| **Android SDK** | `platforms;android-34`, `build-tools;34.0.0`, `cmdline-tools` | script installs what's missing |
+| **Android SDK** | the platform, build-tools and cmdline-tools pinned by `SDK_PLATFORM`, `BUILD_TOOLS` and `CMDLINE_TOOLS` in `scripts/build.sh` | script installs what's missing |
 | **NDK 23.1.7779620** | cgo cross-compile for `armeabi-v7a` | ~1 GB; exact version required |
 | **Go** | only for legacy refs without `tool/go` | modern refs fetch Tailscale's pinned toolchain with `curl` |
 | **~5 GB disk** | SDK + NDK + Gradle caches | |
@@ -100,7 +100,7 @@ Tunables stay environment variables read by `scripts/build.sh`; `make build TS_R
 | `ANDROID_SDK_ROOT` | `~/Library/Android/sdk` (mac), `~/Android/Sdk` (linux) | SDK location |
 | `JAVA_HOME` | autodetected JDK 17 | |
 | `WORKDIR` | `.build` | scratch checkout, one dir per ref |
-| `DIST` | `dist` | APK output dir, absolute or relative to the repo root; `make build-emu` and `make lint` use `.build/dist-emu` and `.build/dist-lint`. An APK already at the output path is overwritten only if it is debug-signed, so a release-signed one is never replaced |
+| `DIST` | `dist` | APK output dir, absolute or relative to the repo root; `make build-emu` and `make emu-test` use the Makefile's `EMU_DIST` (`.build/dist-emu`), `make lint` uses `LINT_DIST` (`.build/dist-lint`). An APK already at the output path is overwritten only if it is debug-signed, so a release-signed one is never replaced |
 | `SKIP_TESTS` | `1` | set `0` to run upstream unit tests (debug variant) |
 | `LINT` | `0` | `1` runs Android Lint, `NewApi` only, with the series' `lint.xml` ignores |
 | `PATCH_SERIES` | empty | a directory under `patches/` that overrides the by-ref lookup |
