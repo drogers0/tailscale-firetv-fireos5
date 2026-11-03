@@ -160,16 +160,16 @@ app_lines() {  # app_lines < DUMP: the lines logged by the app's processes; fail
 }
 app_log() { log | app_lines; }   # this boot
 SCAN=0        # 1 while the app runs: every wait then also fails fast on a crash
-no_crash() {  # die on a crash, a native fatal signal, a failed worker or a missing API
+no_crash() {  # die on a crash, a native fatal signal, a failed worker, a missing API or a dropped IPN notification
   local l a hits
   l="$(log)" || die "$1: adb logcat failed"   # one snapshot per call
   # Checked here, not in app_lines: a die inside $(...) or a pipeline ends only that subshell.
   a="$(printf '%s\n' "$l" | app_lines)" || die "$1: no $PKG process in this boot's log"
   hits="$(printf '%s\n' "$a" | awk '
-    $5 ~ /^[WEF]$/ && /FATAL EXCEPTION|Fatal signal|failed because it threw|NoSuchMethodError|NoClassDefFoundError|VerifyError/ { print; n = 2; next }
+    $5 ~ /^[WEF]$/ && /FATAL EXCEPTION|Fatal signal|failed because it threw|failed to process IPN notification|NoSuchMethodError|NoClassDefFoundError|VerifyError/ { print; n = 2; next }
     n-- > 0' || true)"
   hits+="${hits:+$'\n'}$(printf '%s\n' "$l" | grep -E "ANR in $PKG|Process $PKG \(pid [0-9]+\) has died" || true)"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" | head -20 >&2; die "$1: the app crashed or hit a missing API"; }
+  [ -z "$hits" ] || { printf '%s\n' "$hits" | head -20 >&2; die "$1: the app crashed, hit a missing API or dropped an IPN notification"; }
 }
 wait_for() {  # wait_for SECONDS DESCRIPTION CMD...: retry CMD once a second
   local t="$1" what="$2" end=$((SECONDS + $1)); shift 2
@@ -366,13 +366,16 @@ r="$(ADB_TIMEOUT=300 adb install "$APK" 2>&1)" || true
 adb shell pm path "$PKG" | grep -F 'package:' >/dev/null || die "install of $APK failed: $(printf '%s\n' "$r" | tail -1)"
 
 # ---- 4. checks, in an order where each leaves the state the next needs -------
-# 0011 + 0006: CONNECT_VPN before any launch (logged out, no consent) runs StartVPNWorker
-# through WorkManager, which must post the "open Tailscale" notification.
+# 0011: CONNECT_VPN before any launch (logged out, no consent) runs StartVPNWorker through
+# WorkManager, which must post the "open Tailscale" notification. It is expedited work: below
+# API 31 that runs in WorkManager's foreground service and calls getForegroundInfo(), which
+# upstream implements from 1.104.5 (1.98.8 needed patch 0006 to avoid this path).
 adb shell am broadcast -a "$PKG.CONNECT_VPN" -n "$PKG/.IPNReceiver" >/dev/null
 SCAN=1
-wait_log "0011/0006 StartVPNWorker to run" "Worker result FAILURE for Work .*StartVPNWorker"
+wait_log "0011 expedited work in WorkManager's foreground service" "WM-SystemFgDispatcher: Started foreground service"
+wait_log "0011 StartVPNWorker to run" "Worker result FAILURE for Work .*StartVPNWorker"
 wait_for 10 "0011 the 'open Tailscale' notification" notified
-pass "0011 CONNECT_VPN without consent posts the notification; 0006 worker runs"
+pass "0011 CONNECT_VPN without consent posts the notification; expedited worker ran in the foreground service"
 
 # 0002 + 0010: launch; the network callback must pick a default network at startup.
 adb shell am start -n "$PKG/.MainActivity" >/dev/null   # no -W: it never returns if launch crashes
@@ -450,10 +453,10 @@ if [ "$NET" = 1 ]; then
   no_crash 0004
   pass "0004 sockets protected; tunnel traffic both ways"
 
-  # 0005: the netmap (well over 16 KB with a real DERP map) decodes; the peer list is built
-  # from it, with this device first.
+  # 0005: the InitialStatus notification (peers and users) decodes; with no 'failed to process
+  # IPN notification' anywhere, the peer list is built from it, with this device first.
   wait_for 30 "0005 this device in the peer list" ui_has "$EMU_IP"
-  pass "0005 netmap decoded: peer list shown"
+  pass "0005 InitialStatus decoded: peer list shown"
 
   # 0007: peer details format a key expiry with java.time (TimeUtil).
   wait_for 90 "the 0007 target in the emulator's peer list (can tag:fireos-ci see the expiring node this host sees?)" \
@@ -469,6 +472,13 @@ if [ "$NET" = 1 ]; then
   wait_for 60 "host -> emulator after the network change" reachable "$EMU_IP"
   tun_up || die "0010: tun0 is gone after the network change (or netcfg failed)"
   pass "0010 network change while connected: $old -> $(default_net), tunnel kept"
+  # 0013: below API 23 the VPN follows the system default network; nothing pins one. This
+  # covers the listener half (it returns before logging). newBuilder()'s null logs nothing:
+  # the device checklist covers it (other apps see a network after a reboot).
+  al="$(app_log)" || die "0013: no $PKG process in this boot's log"
+  printf '%s\n' "$al" | grep -E '(Set|set) underlying network' >/dev/null \
+    && die "0013: the VPN's underlying network was set explicitly"
+  pass "0013 underlying network left to the system across the network change"
 
   # 0008: reboot while connected. BootReceiver restarts the VPN without the app being opened.
   reboot_app "0008 connected"
