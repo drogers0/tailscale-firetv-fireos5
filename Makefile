@@ -1,5 +1,5 @@
 # Thin wrapper: each target runs a script. Tunables (TS_REF, MIN_SDK, SKIP_TESTS, LINT,
-# PATCH_SERIES, ...) are environment variables read by scripts/build.sh; see docs/BUILD.md.
+# DIST, ...) are environment variables read by scripts/build.sh; see docs/BUILD.md.
 # `make X VAR=value` and `VAR=value make X` both work (except secrets: see emu-test-net).
 
 .PHONY: check build build-emu emu-test emu-test-net lint clean
@@ -10,7 +10,7 @@ EMU_ARCH ?= $(if $(filter arm64 aarch64,$(shell uname -m)),arm64,amd64)
 EMU_DIST ?= $${WORKDIR:-.build}/dist-emu
 LINT_DIST ?= $${WORKDIR:-.build}/dist-lint
 
-# Tier 0: shellcheck, verify-apk tests, patch series applies to TS_REF.
+# Tier 0: shellcheck, verify-apk tests, toolchain pins and patch series against TS_REF.
 check:
 	shellcheck -S warning scripts/*.sh
 	python3 -m unittest discover -s tests -v

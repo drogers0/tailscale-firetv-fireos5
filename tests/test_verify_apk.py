@@ -47,22 +47,25 @@ class VerifyApkTest(unittest.TestCase):
         self.tmp = Path(tmp.name)
         (self.tmp / "AndroidManifest.xml").write_text(MANIFEST)
 
-    def build_apk(self, min_sdk, abis=(), lib="libgojni.so", extra=()):
-        apk = self.tmp / f"min{min_sdk}-{'-'.join(abis) or 'java'}-{lib}-{len(extra)}.apk"
+    def build_apk(self, min_sdk, abis=(), extra=(), version_code=1):
+        apk = self.tmp / f"min{min_sdk}-{'-'.join(abis) or 'java'}-{len(extra)}-v{version_code}.apk"
         subprocess.run(
             [self.aapt, "link", "-o", str(apk), "-I", self.jar,
              "--manifest", str(self.tmp / "AndroidManifest.xml"),
-             "--min-sdk-version", str(min_sdk), "--target-sdk-version", "34"],
+             "--min-sdk-version", str(min_sdk), "--target-sdk-version", "34",
+             "--version-code", str(version_code)],
             check=True, capture_output=True)
         with zipfile.ZipFile(apk, "a") as z:
             for abi in abis:
-                z.writestr(f"lib/{abi}/{lib}", b"")
+                z.writestr(f"lib/{abi}/libgojni.so", b"")
             for name in extra:
                 z.writestr(name, b"")
         return str(apk)
 
-    def verify(self, *apks, abi="armeabi-v7a"):
+    def verify(self, *apks, abi="armeabi-v7a", version_code=None):
         flags = ["--require-min-sdk", "22"] + (["--require-abi", abi] if abi else [])
+        if version_code is not None:
+            flags += ["--require-version-code", str(version_code)]
         return subprocess.run([sys.executable, str(SCRIPT), *flags, *apks],
                               capture_output=True, text=True)
 
@@ -91,9 +94,18 @@ class VerifyApkTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("missing armeabi-v7a", r.stdout)
 
-    def test_gogio_library_passes(self):
-        r = self.verify(self.build_apk(22, ["armeabi-v7a"], lib="libgio.so"))
+    def test_version_code_match_passes(self):
+        r = self.verify(self.build_apk(22, ["armeabi-v7a"], version_code=298943000),
+                        version_code=298943000)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("versionCode  : 298943000  OK", r.stdout)
+
+    def test_version_code_mismatch_fails(self):
+        # What build.sh sees if upstream stops honouring -PVERSION_CODE_BASE (wall clock).
+        r = self.verify(self.build_apk(22, ["armeabi-v7a"], version_code=298999990),
+                        version_code=298943000)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("FAIL (versionCode)", r.stdout)
 
     def test_no_native_libs_fails_when_abi_required(self):
         r = self.verify(self.build_apk(22))

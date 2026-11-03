@@ -6,7 +6,7 @@ Version numbers and filenames lie; the manifest does not. This gates the build s
 silently-incompatible artifact cannot reach dist/.
 
 Usage:
-    verify-apk.py [--require-min-sdk 22] [--require-abi armeabi-v7a] APK [APK ...]
+    verify-apk.py [--require-min-sdk 22] [--require-abi armeabi-v7a] [--require-version-code N] APK [APK ...]
 
 --require-abi checks for the Go native library under lib/<abi>/, not just any library.
 
@@ -23,8 +23,8 @@ import sys
 import zipfile
 
 
-# gomobile bind (1.64.0+) builds libgojni.so; the legacy gogio recipe builds libgio.so.
-GO_LIB_RE = r"lib/([^/]+)/(?:libgojni|libgio)\.so"
+# gomobile bind builds libgojni.so.
+GO_LIB_RE = r"lib/([^/]+)/libgojni\.so"
 
 
 def read_with_pyaxmlparser(path):
@@ -38,6 +38,7 @@ def read_with_pyaxmlparser(path):
     return {
         "package": a.package,
         "version": a.version_name,
+        "version_code": int(a.version_code) if a.version_code else None,
         # None, not a default. An unknown minSdk must never silently pass.
         "min_sdk": int(mn) if mn is not None else None,
         "target_sdk": int(tg) if tg is not None else None,
@@ -85,6 +86,7 @@ def read_with_aapt(path):
     return {
         "package": grab(r"package: name='([^']+)'"),
         "version": grab(r"versionName='([^']+)'"),
+        "version_code": grab_int(r"versionCode='(\d+)'"),
         # aapt2 prints "minSdkVersion:'22'"; aapt v1 prints "sdkVersion:'22'".
         # Both spellings must be handled — matching only one silently yields no
         # value, and any default here would let an incompatible APK pass.
@@ -120,8 +122,9 @@ def main():
     ap.add_argument("--require-min-sdk", type=int, default=None,
                     help="fail if the APK's minSdk exceeds this device API level")
     ap.add_argument("--require-abi", default=None,
-                    help="fail unless the Go native library (libgojni.so, or gogio's "
-                         "libgio.so) is present for this ABI")
+                    help="fail unless the Go native library (libgojni.so) is present for this ABI")
+    ap.add_argument("--require-version-code", type=int, default=None,
+                    help="fail unless the APK's versionCode is exactly this")
     args = ap.parse_args()
 
     failed = False
@@ -143,6 +146,15 @@ def main():
             else:
                 line += "  OK"
         print(line)
+
+        line = f"  versionCode  : {m['version_code']}"
+        if args.require_version_code is not None:
+            if m["version_code"] == args.require_version_code:
+                line += "  OK"
+            else:
+                line += f"  *** want {args.require_version_code} ***"
+                problems.append("versionCode")
+        print(line)
         print(f"  targetSdk    : {m['target_sdk'] if m['target_sdk'] is not None else 'unknown'}")
 
         print(f"  native ABIs  : {', '.join(m['abis']) or 'none (pure-Java)'}")
@@ -151,7 +163,7 @@ def main():
             if args.require_abi in m["go_abis"]:
                 line += "  OK"
             else:
-                line += f"  *** missing {args.require_abi} (no libgojni.so or libgio.so under lib/{args.require_abi}/) ***"
+                line += f"  *** missing {args.require_abi} (no libgojni.so under lib/{args.require_abi}/) ***"
                 problems.append("abi")
         print(line)
 
