@@ -31,7 +31,7 @@ and keeps its logs in `.build/emu-test/`.
 | 0010 | 2 | mobile data off and on moves the default network |
 | 0001, 0003 | 2 | `IPNService` runs in the foreground |
 | 0008 | 2 | a reboot while logged out: `BootReceiver` stays disconnected, no tunnel |
-| (login) | 3 | an auth key logs in; state `Running`; `tun0` has a tailnet address |
+| (login) | 3 | an auth key logs in; state `Running`; a `tun` interface has a tailnet address |
 | 0004 | 3 | sockets are protected (`VpnService.protect(fd=…) -> true`, never `false`); the host pings the emulator and the emulator pings the host |
 | 0005 | 3 | the InitialStatus notification decodes: the emulator's own address is in its peer list |
 | 0007 | 3 | a node's details show a formatted key expiry (`java.time` at runtime) |

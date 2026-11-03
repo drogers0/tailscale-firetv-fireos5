@@ -260,9 +260,10 @@ running() {    # Running; die at once, with a fixed message, if control rejected
 }
 policy_reads() { local a; a="$(app_log)" || die "login: no $PKG process in this boot's log"; printf '%s\n' "$a" | grep -c 'setting opts.AuthKey by syspolicy' || true; }
 more_reads() { local n; n="$(policy_reads)" || exit 1; [ "$n" -gt "$1" ]; }   # policy_reads printed why
-tun_ip() {     # tun0's address if it is UP; fails if netcfg gave no output
+tun_ip() {     # the VPN interface's address if one is UP; fails if netcfg gave no output
+  # Not just tun0: each establish() makes a new tunN, and 1.104.5 calls it twice in a row at boot.
   local nc; nc="$(ifaces)" || return 1
-  printf '%s\n' "$nc" | awk '$1 == "tun0" && $2 == "UP" { split($3, a, "/"); print a[1] }'
+  printf '%s\n' "$nc" | awk '$1 ~ /^tun[0-9]+$/ && $2 == "UP" { split($3, a, "/"); print a[1]; exit }'
 }
 tun_up()     { local ip; ip="$(tun_ip)" || return 1; case "$ip" in 100.*) ;; *) return 1 ;; esac; }
 tun_down()   { local ip; ip="$(tun_ip)" || return 1; [ -z "$ip" ]; }
@@ -408,7 +409,7 @@ adb shell input keyevent KEYCODE_HOME             # leave the login page it open
 reboot_app 0008
 wait_log "0008 BootReceiver's decision" "BootReceiver: boot: WantRunning=false; staying disconnected" 60
 nc="$(ifaces)" || die "0008: netcfg listed no interfaces"
-printf '%s\n' "$nc" | grep -E '^tun0 ' >/dev/null && die "0008: tun0 is up while logged out"
+printf '%s\n' "$nc" | grep -E '^tun[0-9]+ ' >/dev/null && die "0008: a tun interface is up while logged out"
 no_crash 0008
 pass "0008 reboot while logged out: BootReceiver stays disconnected, no crash, no tunnel"
 log > "$OUT/logcat-boot$BOOT.txt"
@@ -439,10 +440,10 @@ if [ "$NET" = 1 ]; then
   tap_text "Log in"
   wait_for 30 "login to take the key from the AuthKey restriction" more_reads "$n"
   wait_for 90 "state Running" running
-  wait_for 30 "tun0 with a tailnet address" tun_up
+  wait_for 30 "a tun interface with a tailnet address" tun_up
   EMU_IP="$(tun_ip)" || die "login: netcfg failed"
   dev_ok "rm $RES && [ ! -e $RES ]" || die "could not remove the AuthKey restriction"
-  pass "login with an auth key: Running, tun0 $EMU_IP"
+  pass "login with an auth key: Running, tunnel $EMU_IP"
 
   # 0004: below API 23 the app's own sockets stay out of its tunnel through VpnService.protect().
   al="$(app_log)" || die "0004: no $PKG process in this boot's log"
@@ -470,7 +471,7 @@ if [ "$NET" = 1 ]; then
   # 0010: a network change while connected; the tunnel must follow the new network.
   data_toggle 0010
   wait_for 60 "host -> emulator after the network change" reachable "$EMU_IP"
-  tun_up || die "0010: tun0 is gone after the network change (or netcfg failed)"
+  tun_up || die "0010: the tunnel is gone after the network change (or netcfg failed)"
   pass "0010 network change while connected: $old -> $(default_net), tunnel kept"
   # 0013: below API 23 the VPN follows the system default network; nothing pins one. This
   # covers the listener half (it returns before logging). newBuilder()'s null logs nothing:
@@ -484,7 +485,7 @@ if [ "$NET" = 1 ]; then
   reboot_app "0008 connected"
   wait_log "0008 BootReceiver reconnecting" "BootReceiver: boot: WantRunning=true" 60
   wait_for 90 "state Running after boot" in_state Running
-  wait_for 30 "tun0 after boot" tun_up
+  wait_for 30 "the tunnel after boot" tun_up
   ip="$(tun_ip)" || die "0008: netcfg failed"
   [ "$ip" = "$EMU_IP" ] || die "0008: tailnet address changed across the reboot"
   wait_for 60 "host -> emulator after boot" reachable "$EMU_IP"
@@ -493,10 +494,10 @@ if [ "$NET" = 1 ]; then
   # 0008: disconnect, then reboot. The manual disconnect must survive the reboot.
   adb shell am broadcast -a "$PKG.DISCONNECT_VPN" -n "$PKG/.IPNReceiver" >/dev/null
   wait_for 30 "state Stopped" in_state Stopped
-  wait_for 30 "tun0 down" tun_down
+  wait_for 30 "the tunnel down" tun_down
   reboot_app "0008 disconnected"
   wait_log "0008 BootReceiver staying down" "BootReceiver: boot: WantRunning=false" 60
-  for _ in {1..15}; do tun_down || die "0008: tun0 came up after a manual disconnect (or netcfg failed)"; sleep 1; done
+  for _ in {1..15}; do tun_down || die "0008: the tunnel came up after a manual disconnect (or netcfg failed)"; sleep 1; done
   no_crash 0008
   pass "0008 disconnect then reboot: stays down"
   log > "$OUT/logcat-boot$BOOT.txt"
