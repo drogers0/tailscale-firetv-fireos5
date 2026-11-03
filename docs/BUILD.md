@@ -86,6 +86,7 @@ The Make targets are thin wrappers around the scripts:
 | `make build` | full build of the armeabi-v7a APK into `dist/` |
 | `make build-emu` | the same for the local emulator ABI (arm64 on arm64 hosts, x86_64 elsewhere), into `.build/dist-emu/` so `dist/` keeps only shippable APKs |
 | `make emu-test` | boots a fresh API 22 emulator (its own AVD, `tsfire-api22`, on port 5584), installs the `build-emu` APK and runs `scripts/emu-test.sh`'s adb smoke checks; installs the emulator and image on first use; logs in `.build/emu-test/` |
+| `make emu-test-net` | `emu-test`, then logs the emulator in to a real tailnet and checks the tunnel, reboots and a network change; needs `TS_AUTHKEY` (environment or `.env`), see [TESTING.md](TESTING.md) |
 | `make lint` | build plus Android Lint, `NewApi` only; its APK goes to `.build/dist-lint/` |
 | `make clean` | removes `.build/` (or `WORKDIR`); `dist/` is kept |
 
@@ -162,6 +163,8 @@ A later `make build` of the same version refuses to overwrite the signed APK. Mo
 example to a release folder), or build with `DIST=<dir>`.
 
 ## Install and test
+
+Before a device, the emulator tiers in [TESTING.md](TESTING.md) catch most regressions.
 
 ```sh
 adb connect <fire-stick-ip>:5555     # accept the on-screen prompt the first time
