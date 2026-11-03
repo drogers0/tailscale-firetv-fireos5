@@ -215,14 +215,15 @@ trap finish EXIT
 info "$("$SDK/emulator/emulator" -version 2>/dev/null | sed -n 1p)"
 info "Booting $AVD ($IMAGE) as $ANDROID_SERIAL"
 BOOT=1; t0=$SECONDS
+# -partition-size (MB): the default 800 MB /data fills up during dex2oat on the x86_64 image.
 "$SDK/emulator/emulator" -avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim \
-  -no-snapshot -gpu swiftshader_indirect > "$OUT/emulator.log" 2>&1 &
+  -no-snapshot -gpu swiftshader_indirect -partition-size 2048 > "$OUT/emulator.log" 2>&1 &
 EMU_PID=$!
 wait_for "$BOOT_TIMEOUT" "boot" booted
 info "Booted in $((SECONDS - t0))s"
 adb logcat -G 4M        # keep the whole boot in the ring buffer; reset by every reboot
-adb install "$APK" >/dev/null
-adb shell pm path "$PKG" | grep -F 'package:' >/dev/null || die "install of $APK failed"
+r="$(adb install "$APK" 2>&1)" || true
+adb shell pm path "$PKG" | grep -F 'package:' >/dev/null || die "install of $APK failed: $(printf '%s\n' "$r" | tail -1)"
 
 # ---- 4. checks, in an order where each leaves the state the next needs -------
 # 0011 + 0006: CONNECT_VPN before any launch (logged out, no consent) runs StartVPNWorker
