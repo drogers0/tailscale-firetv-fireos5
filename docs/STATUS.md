@@ -157,6 +157,9 @@ the same commit produce APKs that cannot upgrade over one another.
 ./scripts/sign-apk.sh          # signs the newest APK in dist/, refreshes the .sha256
 ```
 
+A later build of the same version refuses to overwrite the signed APK; move it to a release
+folder first, or build with `DIST=<dir>` (see BUILD.md, "Signing").
+
 Signer: `CN=tailscale-firetv-fireos5`, SHA-256 `b6e56d68…53b5`.
 
 The signing key is **deliberately not in this repo.** A public repo would expose the

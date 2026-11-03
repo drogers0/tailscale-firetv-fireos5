@@ -23,13 +23,17 @@ TS_REPO="https://github.com/tailscale/tailscale-android.git"
 # Match the documented release and the available API-22 patch series.
 TS_REF="${TS_REF:-1.98.8-t1241b225b-gbcbaf1889}"
 NDK_VERSION="${NDK_VERSION:-23.1.7779620}"
+# SDK packages; CI keys its SDK cache on these four NAME= lines (.github/actions/setup-build).
+CMDLINE_TOOLS=9477386
+SDK_PLATFORM=android-34
+BUILD_TOOLS=34.0.0
 
 # ---- tunables ---------------------------------------------------------------
 MIN_SDK="${MIN_SDK:-22}"           # device API level
 TS_ARCH="${TS_ARCH:-arm}"          # legacy gogio recipe only; empty = every ABI
 GOMOBILE_TARGET="${GOMOBILE_TARGET:-android/arm}"   # modern recipe; arm = armeabi-v7a
 WORKDIR="${WORKDIR:-.build}"
-DIST="${DIST:-dist}"               # APK output dir, relative to the repo root
+DIST="${DIST:-dist}"               # APK output dir; relative paths are from the repo root
 SKIP_TESTS="${SKIP_TESTS:-1}"
 GRADLE_HEAP="${GRADLE_HEAP:-6g}"
 PATCH_SERIES="${PATCH_SERIES:-}"   # dir under patches/; default: patches/$TS_REF, then patches/<version>
@@ -37,7 +41,7 @@ LINT="${LINT:-0}"                  # 1 = also run Android Lint, NewApi only (scr
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$REPO_ROOT/$WORKDIR/tailscale-android-${TS_REF##*-}"
-DIST="$REPO_ROOT/$DIST"
+case "$DIST" in /*) ;; *) DIST="$REPO_ROOT/$DIST" ;; esac
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
@@ -154,8 +158,8 @@ SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
 if [ ! -x "$SDKMANAGER" ]; then
   info "Installing Android command-line tools"
   case "$(uname)" in
-    Darwin) TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-mac-9477386_latest.zip" ;;
-    Linux)  TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" ;;
+    Darwin) TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-mac-${CMDLINE_TOOLS}_latest.zip" ;;
+    Linux)  TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS}_latest.zip" ;;
     *) die "unsupported platform $(uname)" ;;
   esac
   tmp="$ANDROID_SDK_ROOT/.tmp.$$"; mkdir -p "$tmp"
@@ -168,9 +172,9 @@ if [ ! -x "$SDKMANAGER" ]; then
 fi
 
 MISSING=()
-[ -d "$ANDROID_SDK_ROOT/ndk/$NDK_VERSION" ]  || MISSING+=("ndk;$NDK_VERSION")
-[ -d "$ANDROID_SDK_ROOT/platforms/android-34" ] || MISSING+=("platforms;android-34")
-[ -d "$ANDROID_SDK_ROOT/build-tools/34.0.0" ]   || MISSING+=("build-tools;34.0.0")
+[ -d "$ANDROID_SDK_ROOT/ndk/$NDK_VERSION" ]       || MISSING+=("ndk;$NDK_VERSION")
+[ -d "$ANDROID_SDK_ROOT/platforms/$SDK_PLATFORM" ] || MISSING+=("platforms;$SDK_PLATFORM")
+[ -d "$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS" ] || MISSING+=("build-tools;$BUILD_TOOLS")
 if [ ${#MISSING[@]} -gt 0 ]; then
   info "Installing SDK packages: ${MISSING[*]}"
   yes 2>/dev/null | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
@@ -325,7 +329,7 @@ mkdir -p "$DIST"
 OUT="$DIST/tailscale-fireos5-${TS_REF%%-*}-minsdk${MIN_SDK}-${ABI_LABEL}.apk"
 # Never replace a release-signed APK (sign-apk.sh re-signs in place) with a debug build.
 # apksigner runs `java` from PATH, and JAVA_HOME (found above) need not be on it.
-if [ -f "$OUT" ] && ! PATH="$JAVA_HOME/bin:$PATH" "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" \
+if [ -f "$OUT" ] && ! PATH="$JAVA_HOME/bin:$PATH" "$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/apksigner" \
      verify --print-certs "$OUT" | grep -F 'CN=Android Debug' >/dev/null; then
   die "$OUT is not a debug build (release-signed, or apksigner could not read it); move it away first, or build into another directory with DIST=<dir>"
 fi

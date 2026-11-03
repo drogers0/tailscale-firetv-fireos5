@@ -8,6 +8,7 @@
 EMU_ARCH ?= $(if $(filter arm64 aarch64,$(shell uname -m)),arm64,amd64)
 # Emulator builds stay out of dist/, which holds the APKs that get signed and shipped.
 EMU_DIST ?= $${WORKDIR:-.build}/dist-emu
+LINT_DIST ?= $${WORKDIR:-.build}/dist-lint
 
 # Tier 0: shellcheck, verify-apk tests, patch series applies to TS_REF.
 check:
@@ -30,7 +31,7 @@ emu-test:
 
 # Build plus Android Lint, NewApi only. The APK is a by-product, kept out of dist/.
 lint:
-	LINT=1 DIST="$${WORKDIR:-.build}/dist-lint" scripts/build.sh
+	LINT=1 DIST="$(LINT_DIST)" scripts/build.sh
 
 # Remove upstream checkouts and build trees; dist/ is kept.
 clean:

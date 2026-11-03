@@ -24,7 +24,7 @@ runs:
         # Upstream tool/go runs `set -x` when CI=true; this is its own opt-out.
         echo "NOBASHDEBUG=true" >> "$GITHUB_ENV"
         # A pin line that stops matching would freeze its key, so check the lines exist.
-        sdk_re='^NDK_VERSION=|commandlinetools-linux|platforms;android-|build-tools;'
+        sdk_re='^(NDK_VERSION|CMDLINE_TOOLS|SDK_PLATFORM|BUILD_TOOLS)='
         [ "$(grep -cE "$sdk_re" scripts/build.sh)" = 4 ] \
           || { echo "::error::expected 4 SDK pin lines in scripts/build.sh"; exit 1; }
         grep -qE '^TS_REF=' scripts/build.sh \
