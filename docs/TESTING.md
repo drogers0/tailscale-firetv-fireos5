@@ -93,3 +93,4 @@ On a Fire TV Stick (Fire OS 5):
       [STATUS.md](STATUS.md#verified-end-to-end)).
 
 Everything else is covered by tiers 0-3.
+
