@@ -124,7 +124,21 @@ if [ ${#MISSING[@]} -gt 0 ]; then
 fi
 
 export ANDROID_SERIAL="emulator-$PORT"
-adb() { "$SDK/platform-tools/adb" "$@"; }
+# Every adb call is bounded: an `adb shell` to an emulator that is not up yet can block
+# forever, and then no wait_for deadline (BOOT_TIMEOUT included) ever fires. The watcher
+# exits within a second of adb, and its output goes to /dev/null so that a $(adb …) capture
+# never waits for it.
+ADB_TIMEOUT=30        # seconds per call; adb install passes its own
+adb() {
+  local rc=0 pid i
+  "$SDK/platform-tools/adb" "$@" &
+  pid=$!
+  ( for ((i = 0; i < ADB_TIMEOUT; i++)); do sleep 1; kill -0 "$pid" || exit 0; done
+    kill "$pid" ) >/dev/null 2>&1 &
+  wait "$pid" || rc=$?
+  [ "$rc" != 143 ] || printf 'adb %s: no answer in %ss; killed\n' "$1" "$ADB_TIMEOUT" >&2
+  return "$rc"
+}
 
 if adb devices | grep -E "^${ANDROID_SERIAL}[[:space:]]+device$" >/dev/null; then
   die "$ANDROID_SERIAL is already running; stop it first (adb -s $ANDROID_SERIAL emu kill)"
@@ -302,6 +316,7 @@ reboot_app() {  # reboot_app LABEL: save this boot's log, reboot, wait until the
 
 finish() {
   local rc=$?
+  local ADB_TIMEOUT=10   # after an adb hang, every diagnostic call below would hang as well
   if [ "$rc" != 0 ] && [ -n "${EMU_PID:-}" ]; then
     log > "$OUT/logcat-boot$BOOT.txt" || true
     adb exec-out screencap -p > "$OUT/screen.png" 2>/dev/null || true
@@ -347,7 +362,7 @@ EMU_PID=$!
 wait_for "$BOOT_TIMEOUT" "boot" booted
 info "Booted in $((SECONDS - t0))s"
 adb logcat -G 4M        # keep the whole boot in the ring buffer; reset by every reboot
-r="$(adb install "$APK" 2>&1)" || true
+r="$(ADB_TIMEOUT=300 adb install "$APK" 2>&1)" || true
 adb shell pm path "$PKG" | grep -F 'package:' >/dev/null || die "install of $APK failed: $(printf '%s\n' "$r" | tail -1)"
 
 # ---- 4. checks, in an order where each leaves the state the next needs -------
