@@ -1,0 +1,35 @@
+diff --git a/android/src/main/java/com/tailscale/ipn/IPNReceiver.java b/android/src/main/java/com/tailscale/ipn/IPNReceiver.java
+index 4d60c5c..d93ccdd 100644
+--- a/android/src/main/java/com/tailscale/ipn/IPNReceiver.java
++++ b/android/src/main/java/com/tailscale/ipn/IPNReceiver.java
+@@ -73,27 +73,9 @@ public class IPNReceiver extends BroadcastReceiver {
+                             .build();
+ 
+             workManager.enqueueUniqueWork(WORK_USE_EXIT_NODE, ExistingWorkPolicy.REPLACE, req);
+-        } else if (BuildConfig.DEBUG && Objects.equals(action, INTENT_INTEGRATION_LOGIN)) {
+-            Data input =
+-                    new Data.Builder()
+-                            .putString(
+-                                    IntegrationLoginWorker.EXTRA_CONTROL_URL,
+-                                    intent.getStringExtra(
+-                                            IntegrationLoginWorker.EXTRA_CONTROL_URL))
+-                            .putString(
+-                                    IntegrationLoginWorker.EXTRA_AUTH_KEY,
+-                                    intent.getStringExtra(IntegrationLoginWorker.EXTRA_AUTH_KEY))
+-                            .build();
+-
+-            OneTimeWorkRequest req =
+-                    new OneTimeWorkRequest.Builder(IntegrationLoginWorker.class)
+-                            .setInputData(input)
+-                            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+-                            .addTag(IntegrationLoginWorker.WORK_NAME)
+-                            .build();
+-
+-            workManager.enqueueUniqueWork(
+-                    IntegrationLoginWorker.WORK_NAME, ExistingWorkPolicy.REPLACE, req);
+         }
++        // No INTENT_INTEGRATION_LOGIN branch. Upstream gates it on BuildConfig.DEBUG, but the
++        // APKs built from this tree are the debug variant, and this receiver is exported with no
++        // permission: any installed app could log the device in to any control server.
+     }
+ }

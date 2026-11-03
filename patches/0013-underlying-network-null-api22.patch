@@ -1,0 +1,33 @@
+diff --git a/android/src/main/java/com/tailscale/ipn/IPNService.kt b/android/src/main/java/com/tailscale/ipn/IPNService.kt
+index b1e816d..24a5f83 100644
+--- a/android/src/main/java/com/tailscale/ipn/IPNService.kt
++++ b/android/src/main/java/com/tailscale/ipn/IPNService.kt
+@@ -141,6 +141,10 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+   }
+ 
+   private fun updateUnderlyingNetwork(network: Network?) {
++    // Below API 23 the VPN follows the system default network; see newBuilder().
++    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
++      return
++    }
+     val networks = network?.let { arrayOf(it) } ?: emptyArray()
+     if (!setUnderlyingNetworks(networks)) {
+       TSLog.w(TAG, "Failed to set underlying network: $network")
+@@ -204,8 +208,16 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+       b.setMetered(false) // Inherit the metered status from the underlying networks.
+     }
+ 
++    // Below API 23, pass null: "follow the system default network", what 1.98.8 did and what
++    // was verified on Fire OS 5. An explicit array stays until the listener replaces it, and a
++    // network that arrives between this read and establish() is missed (the listener's call
++    // fails before the VPN exists), so the empty array would stick and apps routed through
++    // the VPN would see no network. Most likely at boot, where 0008 races Wi-Fi.
+     val underlyingNetwork = NetworkChangeCallback.cachedDefaultNetwork
+-    b.setUnderlyingNetworks(underlyingNetwork?.let { arrayOf(it) } ?: emptyArray())
++    b.setUnderlyingNetworks(
++        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) null
++        else underlyingNetwork?.let { arrayOf(it) } ?: emptyArray()
++    )
+ 
+     val mdmAllowed =
+         MDMSettings.includedPackages.flow.value.value?.split(",")?.map { it.trim() } ?: emptyList()

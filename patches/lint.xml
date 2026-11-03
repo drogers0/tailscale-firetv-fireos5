@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- NewApi findings on the patched 1.98.8 tree that are safe on API 22. Applied only by
+<!-- NewApi findings on the patched tree that are safe on API 22. Applied only by
      LINT=1 builds (scripts/lint-newapi.gradle). Every entry says why; anything else NewApi
      reports fails tier 1. Keep entries narrow: match the exact API, never a whole file. -->
 <lint>

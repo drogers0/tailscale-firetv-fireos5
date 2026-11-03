@@ -1,8 +1,8 @@
 diff --git a/android/src/main/java/com/tailscale/ipn/MainActivity.kt b/android/src/main/java/com/tailscale/ipn/MainActivity.kt
-index 7b7181e..204e622 100644
+index d7723e3..6d084d1 100644
 --- a/android/src/main/java/com/tailscale/ipn/MainActivity.kt
 +++ b/android/src/main/java/com/tailscale/ipn/MainActivity.kt
-@@ -451,6 +451,16 @@ class MainActivity : ComponentActivity() {
+@@ -499,6 +499,16 @@ class MainActivity : ComponentActivity() {
    fun isAnotherVpnActive(context: Context): Boolean {
      val connectivityManager =
          context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager

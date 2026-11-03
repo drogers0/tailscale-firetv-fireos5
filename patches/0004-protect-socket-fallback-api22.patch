@@ -1,44 +1,8 @@
-diff --git a/android/src/main/java/com/tailscale/ipn/IPNService.kt b/android/src/main/java/com/tailscale/ipn/IPNService.kt
-index 848092f..21696d6 100644
---- a/android/src/main/java/com/tailscale/ipn/IPNService.kt
-+++ b/android/src/main/java/com/tailscale/ipn/IPNService.kt
-@@ -38,6 +38,9 @@ open class IPNService : VpnService(), libtailscale.IPNService {
-     super.onCreate()
-     // grab app to make sure it initializes
-     app = App.get()
-+    // Track the live service so App.bindSocketToNetwork() can reach protect()
-+    // on API < 23, where Network.bindSocket(FileDescriptor) does not exist.
-+    runningInstance = this
-   }
- 
-   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
-@@ -109,6 +112,9 @@ open class IPNService : VpnService(), libtailscale.IPNService {
-   }
- 
-   override fun onDestroy() {
-+    if (runningInstance === this) {
-+      runningInstance = null
-+    }
-     close()
-     updateVpnStatus(false)
-     super.onDestroy()
-@@ -228,6 +234,11 @@ open class IPNService : VpnService(), libtailscale.IPNService {
-   }
- 
-   companion object {
-+    // The currently running service, or null. Used only so that
-+    // App.bindSocketToNetwork() can fall back to VpnService.protect(fd) on
-+    // API < 23. Not a general-purpose accessor.
-+    @Volatile @JvmStatic var runningInstance: IPNService? = null
-+
-     const val ACTION_START_VPN = "com.tailscale.ipn.START_VPN"
-     const val ACTION_STOP_VPN = "com.tailscale.ipn.STOP_VPN"
-     const val ACTION_RESTART_VPN = "com.tailscale.ipn.RESTART_VPN"
 diff --git a/android/src/main/java/com/tailscale/ipn/App.kt b/android/src/main/java/com/tailscale/ipn/App.kt
-index 11e8b4d..d0b9ba2 100644
+index 012244f..36c176c 100644
 --- a/android/src/main/java/com/tailscale/ipn/App.kt
 +++ b/android/src/main/java/com/tailscale/ipn/App.kt
-@@ -456,13 +465,36 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
+@@ -516,13 +516,36 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
      return getKeyStore().load(id)
    }
  
@@ -79,3 +43,39 @@ index 11e8b4d..d0b9ba2 100644
  
      val iface = NetworkChangeCallback.cachedDefaultInterfaceName
  
+diff --git a/android/src/main/java/com/tailscale/ipn/IPNService.kt b/android/src/main/java/com/tailscale/ipn/IPNService.kt
+index adb7b1f..b1e816d 100644
+--- a/android/src/main/java/com/tailscale/ipn/IPNService.kt
++++ b/android/src/main/java/com/tailscale/ipn/IPNService.kt
+@@ -39,6 +39,9 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+     super.onCreate()
+     // grab app to make sure it initializes
+     app = App.get()
++    // Track the live service so App.bindSocketToNetwork() can reach protect()
++    // on API < 23, where Network.bindSocket(FileDescriptor) does not exist.
++    runningInstance = this
+ 
+     NetworkChangeCallback.setUnderlyingNetworkListener { network ->
+       updateUnderlyingNetwork(network)
+@@ -114,6 +117,9 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+   }
+ 
+   override fun onDestroy() {
++    if (runningInstance === this) {
++      runningInstance = null
++    }
+     NetworkChangeCallback.setUnderlyingNetworkListener(null)
+     close()
+     updateVpnStatus(false)
+@@ -252,6 +258,11 @@ open class IPNService : VpnService(), libtailscale.IPNService {
+   }
+ 
+   companion object {
++    // The currently running service, or null. Used only so that
++    // App.bindSocketToNetwork() can fall back to VpnService.protect(fd) on
++    // API < 23. Not a general-purpose accessor.
++    @Volatile @JvmStatic var runningInstance: IPNService? = null
++
+     const val ACTION_START_VPN = "com.tailscale.ipn.START_VPN"
+     const val ACTION_STOP_VPN = "com.tailscale.ipn.STOP_VPN"
+     const val ACTION_RESTART_VPN = "com.tailscale.ipn.RESTART_VPN"

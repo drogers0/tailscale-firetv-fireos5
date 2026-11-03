@@ -1,5 +1,5 @@
 diff --git a/android/src/main/java/com/tailscale/ipn/StartVPNWorker.java b/android/src/main/java/com/tailscale/ipn/StartVPNWorker.java
-index 9ab4183..73d25ab 100644
+index 4d15d66..6727521 100644
 --- a/android/src/main/java/com/tailscale/ipn/StartVPNWorker.java
 +++ b/android/src/main/java/com/tailscale/ipn/StartVPNWorker.java
 @@ -12,6 +12,7 @@ import android.net.VpnService;
@@ -7,10 +7,10 @@ index 9ab4183..73d25ab 100644
  
  import androidx.annotation.NonNull;
 +import androidx.core.app.NotificationCompat;
+ import androidx.work.ForegroundInfo;
  import androidx.work.Worker;
  import androidx.work.WorkerParameters;
- 
-@@ -56,7 +57,7 @@ public final class StartVPNWorker extends Worker {
+@@ -63,7 +64,7 @@ public final class StartVPNWorker extends Worker {
          int pendingIntentFlags = PendingIntent.FLAG_ONE_SHOT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0);
          PendingIntent pendingIntent = PendingIntent.getActivity(app, 0, intent, pendingIntentFlags);
  
