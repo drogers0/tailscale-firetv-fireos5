@@ -98,7 +98,7 @@ class VerifyApkTest(unittest.TestCase):
     def test_no_native_libs_fails_when_abi_required(self):
         r = self.verify(self.build_apk(22))
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("pure-Java", r.stdout)
+        self.assertIn("missing armeabi-v7a", r.stdout)
 
     def test_pure_java_passes_without_abi_requirement(self):
         r = self.verify(self.build_apk(22), abi=None)

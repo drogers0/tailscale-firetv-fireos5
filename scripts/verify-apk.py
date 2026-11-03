@@ -145,7 +145,7 @@ def main():
         print(line)
         print(f"  targetSdk    : {m['target_sdk'] if m['target_sdk'] is not None else 'unknown'}")
 
-        print(f"  native ABIs  : {', '.join(m['abis']) or 'none (pure-Java, ABI-independent)'}")
+        print(f"  native ABIs  : {', '.join(m['abis']) or 'none (pure-Java)'}")
         line = f"  Go library   : {', '.join(m['go_abis']) or 'none'}"
         if args.require_abi:
             if args.require_abi in m["go_abis"]:

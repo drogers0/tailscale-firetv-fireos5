@@ -10,8 +10,8 @@
 # Environment:
 #   EMU_ARCH          amd64 (x86_64 image, CI) or arm64 (arm64-v8a image, Apple Silicon);
 #                     default from `uname -m`. `make emu-test` passes the Makefile's value.
-#   DIST              where `make build-emu` puts its APK, relative to the repo root;
-#                     default .build/dist-emu (under WORKDIR), the same as the Makefile.
+#   DIST              where `make build-emu` puts its APK (relative paths are from the repo
+#                     root); default .build/dist-emu (under WORKDIR), the same as the Makefile.
 #   ANDROID_SDK_ROOT  as for build.sh. Missing emulator packages are installed into it.
 #
 # The same script runs locally and in CI. It always creates its own AVD (tsfire-api22,
@@ -34,17 +34,19 @@ BOOT_TIMEOUT=300
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$REPO_ROOT/${WORKDIR:-.build}/emu-test"
-DIST="$REPO_ROOT/${DIST:-${WORKDIR:-.build}/dist-emu}"
+DIST="${DIST:-${WORKDIR:-.build}/dist-emu}"
+case "$DIST" in /*) ;; *) DIST="$REPO_ROOT/$DIST" ;; esac
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 pass() { printf '\033[32mPASS\033[0m %s\n' "$*"; }
 
-case "${EMU_ARCH:-$(uname -m)}" in
+EMU_ARCH="${EMU_ARCH:-$(uname -m)}"
+case "$EMU_ARCH" in
   amd64|x86_64)  ABI=x86_64 ;;
   arm64|aarch64) ABI=arm64-v8a ;;
-  *) die "unsupported EMU_ARCH '${EMU_ARCH:-$(uname -m)}' — want amd64 or arm64" ;;
+  *) die "unsupported EMU_ARCH '$EMU_ARCH' — want amd64 or arm64" ;;
 esac
 IMAGE="system-images;android-$EMU_API;$EMU_TAG;$ABI"
 
@@ -205,6 +207,8 @@ finish() {
   fi
   if [ -n "${EMU_PID:-}" ] && kill -0 "$EMU_PID" 2>/dev/null; then
     adb emu kill >/dev/null 2>&1 || kill "$EMU_PID" 2>/dev/null || true
+    for _ in $(seq 30); do kill -0 "$EMU_PID" 2>/dev/null || break; sleep 1; done
+    kill -9 "$EMU_PID" 2>/dev/null || true   # still up after 30 s
     wait "$EMU_PID" 2>/dev/null || true
   fi
   exit "$rc"
@@ -212,7 +216,8 @@ finish() {
 trap finish EXIT
 
 # ---- 3. boot and install ----------------------------------------------------
-info "$("$SDK/emulator/emulator" -version 2>/dev/null | sed -n 1p)"
+# From the package metadata: on Linux, `emulator -version` prints nothing to stdout.
+info "Emulator $(sed -n 's/^Pkg.Revision=//p' "$SDK/emulator/source.properties")"
 info "Booting $AVD ($IMAGE) as $ANDROID_SERIAL"
 BOOT=1; t0=$SECONDS
 # -partition-size (MB): the default 800 MB /data fills up during dex2oat on the x86_64 image.
@@ -269,7 +274,9 @@ adb shell input keyevent KEYCODE_HOME             # leave the login page it open
 # disconnected (WantRunning=false), with no crash and no tunnel.
 reboot_app 0008
 wait_log "0008 BootReceiver's decision" "BootReceiver: boot: WantRunning=false; staying disconnected" 60
-adb shell netcfg | grep -E '^tun0 ' >/dev/null && die "0008: tun0 is up while logged out"
+nc="$(adb shell netcfg)"   # adb shell exits 0 even on failure: require the lo line first
+printf '%s\n' "$nc" | grep -E '^lo ' >/dev/null || die "0008: netcfg listed no interfaces"
+printf '%s\n' "$nc" | grep -E '^tun0 ' >/dev/null && die "0008: tun0 is up while logged out"
 no_crash 0008
 pass "0008 reboot while logged out: BootReceiver stays disconnected, no crash, no tunnel"
 log > "$OUT/logcat-boot$BOOT.txt"
