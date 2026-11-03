@@ -1,0 +1,43 @@
+name: Set up emulator host
+description: KVM access plus the emulator package cache for scripts/emu-test.sh (run after setup-build)
+inputs:
+  save:
+    description: Save the emulator cache entry on a miss. Pass 'true' only from pushes to main, so PR runs never store multi-GB copies of their own
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Enable KVM
+      shell: bash
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+          | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+        ls -l /dev/kvm
+    - id: key
+      shell: bash
+      run: |
+        # A pin line that stops matching would freeze the key, so check both lines exist.
+        [ "$(grep -cE '^EMU_(API|TAG)=' scripts/emu-test.sh)" = 2 ] \
+          || { echo "::error::expected EMU_API= and EMU_TAG= pin lines in scripts/emu-test.sh"; exit 1; }
+        echo "emu=$(grep -E '^EMU_(API|TAG)=' scripts/emu-test.sh | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+    # Emulator, platform-tools and system image under setup-build's SDK root. Written only
+    # when save is 'true', like the shared SDK entry. No restore-keys: a prefix restore would
+    # carry an old image into the new entry.
+    - if: inputs.save == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/android-sdk/emulator
+          ~/android-sdk/platform-tools
+          ~/android-sdk/system-images
+        key: emulator-${{ runner.os }}-${{ steps.key.outputs.emu }}
+    - if: inputs.save != 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/android-sdk/emulator
+          ~/android-sdk/platform-tools
+          ~/android-sdk/system-images
+        key: emulator-${{ runner.os }}-${{ steps.key.outputs.emu }}

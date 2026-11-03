@@ -29,6 +29,7 @@ MIN_SDK="${MIN_SDK:-22}"           # device API level
 TS_ARCH="${TS_ARCH:-arm}"          # legacy gogio recipe only; empty = every ABI
 GOMOBILE_TARGET="${GOMOBILE_TARGET:-android/arm}"   # modern recipe; arm = armeabi-v7a
 WORKDIR="${WORKDIR:-.build}"
+DIST="${DIST:-dist}"               # APK output dir, relative to the repo root
 SKIP_TESTS="${SKIP_TESTS:-1}"
 GRADLE_HEAP="${GRADLE_HEAP:-6g}"
 PATCH_SERIES="${PATCH_SERIES:-}"   # dir under patches/; default: patches/$TS_REF, then patches/<version>
@@ -36,7 +37,7 @@ LINT="${LINT:-0}"                  # 1 = also run Android Lint, NewApi only (scr
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$REPO_ROOT/$WORKDIR/tailscale-android-${TS_REF##*-}"
-DIST="$REPO_ROOT/dist"
+DIST="$REPO_ROOT/$DIST"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
@@ -322,9 +323,15 @@ APK="$(ls -1 $APK_GLOB 2>/dev/null | head -1)"
 # ---- 11. verify + publish ---------------------------------------------------
 mkdir -p "$DIST"
 OUT="$DIST/tailscale-fireos5-${TS_REF%%-*}-minsdk${MIN_SDK}-${ABI_LABEL}.apk"
+# Never replace a release-signed APK (sign-apk.sh re-signs in place) with a debug build.
+# apksigner runs `java` from PATH, and JAVA_HOME (found above) need not be on it.
+if [ -f "$OUT" ] && ! PATH="$JAVA_HOME/bin:$PATH" "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" \
+     verify --print-certs "$OUT" | grep -F 'CN=Android Debug' >/dev/null; then
+  die "$OUT is not a debug build (release-signed, or apksigner could not read it); move it away first, or build into another directory with DIST=<dir>"
+fi
 cp "$APK" "$OUT"
 
-info "Verifying (minSdk <= $MIN_SDK, $TARGET_ABI present)"
+info "Verifying (minSdk <= $MIN_SDK, $TARGET_ABI Go library present)"
 if ! python3 "$REPO_ROOT/scripts/verify-apk.py" --require-min-sdk "$MIN_SDK" --require-abi "$TARGET_ABI" "$OUT"; then
   rm -f "$OUT"
   die "verification failed — artifact rejected"

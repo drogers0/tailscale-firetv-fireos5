@@ -84,8 +84,9 @@ The Make targets are thin wrappers around the scripts:
 |---|---|
 | `make check` | shellcheck, `verify-apk` tests, and `scripts/build.sh --patch-only` (the series applies to `TS_REF`; needs only git) |
 | `make build` | full build of the armeabi-v7a APK into `dist/` |
-| `make build-emu` | the same for the local emulator ABI (arm64 on arm64 hosts, x86_64 elsewhere) |
-| `make lint` | build plus Android Lint, `NewApi` only |
+| `make build-emu` | the same for the local emulator ABI (arm64 on arm64 hosts, x86_64 elsewhere), into `.build/dist-emu/` so `dist/` keeps only shippable APKs |
+| `make emu-test` | boots a fresh API 22 emulator (its own AVD, `tsfire-api22`, on port 5584), installs the `build-emu` APK and runs `scripts/emu-test.sh`'s adb smoke checks; installs the emulator and image on first use; logs in `.build/emu-test/` |
+| `make lint` | build plus Android Lint, `NewApi` only; its APK goes to `.build/dist-lint/` |
 | `make clean` | removes `.build/` (or `WORKDIR`); `dist/` is kept |
 
 Tunables stay environment variables read by `scripts/build.sh`; `make build TS_REF=…` and
@@ -99,6 +100,7 @@ Tunables stay environment variables read by `scripts/build.sh`; `make build TS_R
 | `ANDROID_SDK_ROOT` | `~/Library/Android/sdk` (mac), `~/Android/Sdk` (linux) | SDK location |
 | `JAVA_HOME` | autodetected JDK 17 | |
 | `WORKDIR` | `.build` | scratch checkout, one dir per ref |
+| `DIST` | `dist` | APK output dir, relative to the repo root; `make build-emu` and `make lint` use `.build/dist-emu` and `.build/dist-lint`. A release-signed APK already at the output path is never overwritten |
 | `SKIP_TESTS` | `1` | set `0` to run upstream unit tests (debug variant) |
 | `LINT` | `0` | `1` runs Android Lint, `NewApi` only, with the series' `lint.xml` ignores |
 | `PATCH_SERIES` | empty | a directory under `patches/` that overrides the by-ref lookup |
@@ -134,9 +136,10 @@ API-22 bugs listed in STATUS.md — expect `NoSuchMethodError` / `NoClassDefFoun
 7. **Assembles the APK** — `assembleFdroidDebug` or `assembleDebug` depending on whether
    the ref still has flavors — plus debug unit tests with `SKIP_TESTS=0`, and NewApi lint
    with `LINT=1`.
-8. **Verifies** with `scripts/verify-apk.py`, which hard-fails on `minSdk` too high or a
-   missing ABI — the one you targeted, or `armeabi-v7a` for a multi-ABI build. A rejected
-   artifact is deleted rather than written to `dist/`.
+8. **Verifies** with `scripts/verify-apk.py`, which hard-fails on `minSdk` too high or
+   the Go native library missing for the ABI you targeted, or for `armeabi-v7a` in a
+   multi-ABI build. A rejected artifact is deleted rather than written to the output
+   directory.
 
 Output:
 
@@ -154,6 +157,9 @@ dist/tailscale-fireos5-<ver>-minsdk22-armeabi-v7a.apk.sha256
 Uses `TS_KEYSTORE_BASE64` / `TS_KEYSTORE_PASSWORD` / `TS_KEY_ALIAS` when set (CI), else
 `~/.keystores/tailscale-firetv-release.{jks,pass}`. See STATUS.md — note that GitHub
 secrets cannot be read back, so the local keystore must be preserved.
+
+A later `make build` of the same version refuses to overwrite the signed APK. Move it (for
+example to a release folder), or build with `DIST=<dir>`.
 
 ## Install and test
 

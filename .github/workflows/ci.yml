@@ -54,3 +54,31 @@ jobs:
           path: .build/*/android/build/reports/
           if-no-files-found: ignore
           retention-days: 14
+  emulator:
+    name: Tier 2 · API 22 emulator smoke tests
+    needs: check
+    # PRs to main, and pushes to main, which seed the emulator cache PRs restore. Never
+    # under upstream-drift.yml: a called workflow sees the caller's schedule or
+    # workflow_dispatch event.
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup-build
+        with:
+          cache-key: emulator  # save-sdk stays 'false': emulator packages never enter the shared SDK entry
+      - uses: ./.github/actions/setup-emulator
+        with:
+          save: ${{ github.event_name == 'push' }}  # only main pushes write the emulator entry
+      - run: make build-emu emu-test
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: emu-test-logs
+          path: .build/emu-test/
+          if-no-files-found: ignore
+          retention-days: 14
