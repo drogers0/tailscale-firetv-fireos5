@@ -1,15 +1,16 @@
 # Status — WORKING
 
-Last updated 2026-11-02.
+Last updated 2026-11-03.
 
-Tailscale **1.98.8** (current stable) runs on **Fire OS 5 / Android 5.1 / API 22** with
-compatibility patches, and **routes traffic through an exit node**.
+Tailscale **1.104.5** (current stable) builds for **Fire OS 5 / Android 5.1 / API 22** with
+compatibility patches and passes tiers 0-3. Device-verified on 1.98.8, where it **routes
+traffic through an exit node**; 1.104.5 awaits the same device check.
 
 ---
 
 ## Verified end-to-end
 
-On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
+On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0), running 1.98.8:
 
 | | |
 |---|---|
@@ -62,7 +63,7 @@ check is on the release checklist.
 ## Build
 
 ```sh
-TS_REF=1.98.8-t1241b225b-gbcbaf1889 MIN_SDK=22 ./scripts/build.sh
+make build          # the pinned TS_REF, at MIN_SDK=22
 ```
 
 ~12 s incremental, a few minutes cold. Patches apply automatically; the build hard-fails
@@ -73,20 +74,30 @@ if any does not.
 | # | Fixes | API |
 |---|---|---|
 | 0001 | `NotificationChannel`, unguarded in `App.onCreate()` | 26 |
-| 0002 | `QuickToggleService : TileService`, 2 call sites; `@RequiresApi` so lint enforces the guards | 24 |
+| 0002 | `QuickToggleService : TileService`, 2 call sites; `@RequiresApi` so lint enforces the guards; manifest `tools:targetApi` | 24 |
 | 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 |
 | 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 |
-| 0005 | netmap decode: `decodeFromString`, not `decodeFromStream` | ≤23 |
-| 0006 | drop `setExpedited` from `IPNReceiver` work requests | 31 |
+| 0005 | JSON decode (`Notifier`, LocalAPI `Client`): `decodeFromString`, not `decodeFromStream`; build.sh rejects any new stream decode | ≤23 |
+| 0006 | retired at 1.104.5: upstream workers implement `getForegroundInfo()` | 31 |
 | 0007 | `coreLibraryDesugaring` for `java.time` | 26 |
 | 0008 | `BOOT_COMPLETED` receiver, standing in for always-on VPN | 24 |
 | 0009 | `getActiveNetwork` in the VPN-conflict check → `getAllNetworks` below 23 | 23 |
 | 0010 | read the initial network state in `NetworkChangeCallback.onAvailable` | 26 |
 | 0011 | `Notification.Builder(Context, String)` in `StartVPNWorker` → `NotificationCompat` | 26 |
+| 0012 | drop the debug-only `integration.LOGIN` broadcast (exported, no permission) | — (security) |
+| 0013 | `setUnderlyingNetworks(null)` below API 23, as 1.98.8 did (an empty array can stick if the network arrives during `establish()`) | 23 |
+
+1.104.5: 12 patches — 11 for API 22 (as many as 1.98.8's final series: 0006 retired, 0013
+added) plus 0012.
 
 Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
 these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
-API 24 — and **0008**, which adds what upstream gets from always-on VPN.
+API 24 — **0008**, which adds what upstream gets from always-on VPN, **0012**, a security fix
+for this repo's debug builds, and **0013**, which keeps 1.98.8's "follow the default network"
+in place of upstream's explicit underlying network. 0006 is retired.
+
+Netmap disk caching is off, as upstream ships it: the native library is built with
+upstream's `GOMOBILE_BUILD_TAGS`.
 
 ### 0005 is the interesting one
 
@@ -108,6 +119,10 @@ matter, and the offsets in the message vary between runs. Only the netmap notifi
 that large (28 KB here); State and Prefs are small and always decoded fine, so **peers
 silently never arrived while everything else worked**. The exception escaped the Go
 callback and the entire notification was dropped, with no error anywhere.
+
+From 1.104.5 the peer list arrives as an `InitialStatus` notification followed by deltas,
+and upstream catches a failed decode and logs `failed to process IPN notification`; the
+`InitialStatus` notification carries every peer and is the one that crosses 16 KB.
 
 Upstream never meets this — it ships minSdk 26, above the API 24 fix. kotlinx.serialization
 became exposed only in 1.5.0, when `CharsetReader` was added as an optimization; Tailscale
@@ -211,8 +226,8 @@ see netmap, DERP, `wgcfg` and socket-binding activity. Kotlin crashes still go t
 
 ## Gotcha: poison-pill work items
 
-A failed `USE_EXIT_NODE` broadcast (pre-0006) persists a WorkManager job that crashes the
-app on **every** start. Clear it without losing the login:
+On builds without 0006 (early 1.98.8 builds; upstream fixed the cause at 1.104.5), a failed
+`USE_EXIT_NODE` broadcast persists a WorkManager job that crashes the app on **every** start. Clear it without losing the login:
 
 ```sh
 adb shell run-as com.tailscale.ipn rm -f databases/androidx.work.workdb*

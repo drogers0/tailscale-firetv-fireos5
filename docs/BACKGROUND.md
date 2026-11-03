@@ -39,12 +39,12 @@ technical requirement — so this repo checks out a finished release and restore
 
 | | |
 |---|---|
-| `android/build.gradle` | `minSdkVersion` |
+| `android/build.gradle.kts` | `minSdk` |
 | `gomobile bind` | `-androidapi` |
 
 Overriding only the first yields an APK that installs and then dies in native code.
 
-## Why 1.98.8 rather than an older release
+## Why a current release rather than an older one
 
 Decided empirically rather than by argument. The codebase splits in two, and the risks sit
 in different halves:
@@ -58,14 +58,18 @@ Freezing on 2024's 1.64.0 freezes *both*. Building both and counting:
 
 | | 1.64.0 | 1.98.8 |
 |---|---|---|
-| Patches needed | 1 | 6 (+1 build flag) |
+| Patches needed (first pass) | 1 | 6 (+1 build flag) |
 | `gomobile bind -androidapi 22` | works | works |
 | Manifest merger at minSdk 22 | clean | clean |
 
 Five extra patches buys two years of security fixes in the layer that carries traffic, and
 cheap rebases as upstream moves. No library rejected minSdk 22, and the native layer
 cross-compiles for API 22 without complaint — upstream's real debt is a handful of API
-guards that rotted once they became dead code at minSdk 26.
+guards that rotted once they became dead code at minSdk 26. Device and emulator testing later
+grew the 1.98.8 series to 11.
+
+The repo therefore tracks the current stable release; [STATUS.md](STATUS.md#patches) lists the
+series for it, and a release has needed about a dozen patches.
 
 ## Device compatibility
 
