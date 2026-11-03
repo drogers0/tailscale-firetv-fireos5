@@ -8,6 +8,8 @@ silently-incompatible artifact cannot reach dist/.
 Usage:
     verify-apk.py [--require-min-sdk 22] [--require-abi armeabi-v7a] APK [APK ...]
 
+--require-abi checks for the Go native library under lib/<abi>/, not just any library.
+
 Reads the manifest via pyaxmlparser, falling back to aapt/aapt2 from the Android SDK
 build-tools if that isn't installed.
 """
@@ -19,6 +21,10 @@ import re
 import subprocess
 import sys
 import zipfile
+
+
+# gomobile bind (1.64.0+) builds libgojni.so; the legacy gogio recipe builds libgio.so.
+GO_LIB_RE = r"lib/([^/]+)/(?:libgojni|libgio)\.so"
 
 
 def read_with_pyaxmlparser(path):
@@ -98,6 +104,10 @@ def inspect(path):
         names = z.namelist()
     meta["abis"] = sorted({m.group(1) for n in names
                            if (m := re.match(r"lib/([^/]+)/", n))})
+    # ABIs that carry the Go native library. Other libraries say nothing about what was
+    # built: androidx alone ships lib/<every ABI>/libandroidx.graphics.path.so.
+    meta["go_abis"] = sorted({m.group(1) for n in names
+                              if (m := re.fullmatch(GO_LIB_RE, n))})
     meta["densities"] = sorted({m.group(1) for n in names
                                 if (m := re.search(r"res/[^/]*-(\w*dpi)[/-]", n))})
     meta["size_mb"] = os.path.getsize(path) / 1048576
@@ -110,7 +120,8 @@ def main():
     ap.add_argument("--require-min-sdk", type=int, default=None,
                     help="fail if the APK's minSdk exceeds this device API level")
     ap.add_argument("--require-abi", default=None,
-                    help="fail if the APK has native libs but not this ABI")
+                    help="fail unless the Go native library (libgojni.so, or gogio's "
+                         "libgio.so) is present for this ABI")
     args = ap.parse_args()
 
     failed = False
@@ -134,17 +145,15 @@ def main():
         print(line)
         print(f"  targetSdk    : {m['target_sdk'] if m['target_sdk'] is not None else 'unknown'}")
 
-        if m["abis"]:
-            line = f"  native ABIs  : {', '.join(m['abis'])}"
-            if args.require_abi:
-                if args.require_abi in m["abis"]:
-                    line += "  OK"
-                else:
-                    line += f"  *** missing {args.require_abi} ***"
-                    problems.append("abi")
-            print(line)
-        else:
-            print("  native ABIs  : none (pure-Java, ABI-independent)  OK")
+        print(f"  native ABIs  : {', '.join(m['abis']) or 'none (pure-Java, ABI-independent)'}")
+        line = f"  Go library   : {', '.join(m['go_abis']) or 'none'}"
+        if args.require_abi:
+            if args.require_abi in m["go_abis"]:
+                line += "  OK"
+            else:
+                line += f"  *** missing {args.require_abi} (no libgojni.so or libgio.so under lib/{args.require_abi}/) ***"
+                problems.append("abi")
+        print(line)
 
         print(f"  densities    : {', '.join(m['densities']) if m['densities'] else 'none (nodpi/universal)'}")
 
