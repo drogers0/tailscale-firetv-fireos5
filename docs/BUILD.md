@@ -129,8 +129,8 @@ patch that does not apply stops the build, naming the hunk.
    commit — plus debug unit tests with `SKIP_TESTS=0`, and NewApi lint with `LINT=1`.
 8. **Verifies** with `scripts/verify-apk.py`, which hard-fails on `minSdk` too high or
    the Go native library missing for the ABI you targeted, or for `armeabi-v7a` in a
-   multi-ABI build, or a versionCode other than the one passed to Gradle. A rejected artifact is deleted rather than written to the output
-   directory.
+   multi-ABI build, or a versionCode other than the one passed to Gradle. A rejected
+   artifact is deleted rather than written to the output directory.
 
 Output:
 

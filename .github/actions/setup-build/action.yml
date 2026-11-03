@@ -1,5 +1,5 @@
 name: Set up build toolchain
-description: The JDK pinned in scripts/build.sh, plus Gradle, Android SDK and Go caches for scripts/build.sh
+description: The JDK pinned in scripts/build.sh, plus Gradle, Android SDK and Go caches
 inputs:
   cache-key:
     description: Separates Go build caches for jobs that build different targets or refs (e.g. tier1, drift, emulator)
@@ -23,11 +23,11 @@ runs:
           || { echo "::error::expected 4 SDK pin lines in scripts/build.sh"; exit 1; }
         grep -qE '^TS_REF=' scripts/build.sh \
           || { echo "::error::no TS_REF= pin line in scripts/build.sh"; exit 1; }
+        jdk="$(sed -n 's/^JDK=//p' scripts/build.sh)"
+        [ -n "$jdk" ] || { echo "::error::no JDK= pin line in scripts/build.sh"; exit 1; }
         h() { sha256sum | cut -c1-16; }
         sdk="$(grep -E "$sdk_re" scripts/build.sh | h)"
         go="$( { grep -E '^TS_REF=' scripts/build.sh; echo "${TS_REF:-}"; } | h)"
-        jdk="$(sed -n 's/^JDK=//p' scripts/build.sh)"
-        [ -n "$jdk" ] || { echo "::error::no JDK= pin line in scripts/build.sh"; exit 1; }
         { echo "sdk=$sdk"; echo "go=$go"; echo "jdk=$jdk"; } >> "$GITHUB_OUTPUT"
     - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
       with:

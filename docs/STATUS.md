@@ -31,12 +31,14 @@ On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0), runni
 > **Measuring exit-node routing:** public egress IP is an unreliable check — if the exit
 > node sits behind the same internet connection, both ends report the same address. Use the
 > tunnel byte counters instead. Without an exit node selected, public-internet traffic never
-> traverses `tun0` at all.
+> traverses the tunnel at all. The tunnel is the `UP` `tunN` with a `100.x` address; it can be
+> `tun1` after a reconnect, so look it up first:
 >
 > ```sh
-> adb shell cat /sys/class/net/tun0/statistics/rx_bytes
+> t=$(adb shell netcfg | awk '$1 ~ /^tun[0-9]+$/ && $2 == "UP" && $3 ~ /^100\./ {print $1; exit}')
+> adb shell cat /sys/class/net/$t/statistics/rx_bytes
 > adb shell curl -s -o /dev/null -w '%{size_download}\n' http://speedtest.tele2.net/1MB.zip
-> adb shell cat /sys/class/net/tun0/statistics/rx_bytes
+> adb shell cat /sys/class/net/$t/statistics/rx_bytes
 > ```
 
 ## Reboot behaviour
@@ -78,7 +80,7 @@ if any does not.
 | 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 |
 | 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 |
 | 0005 | JSON decode (`Notifier`, LocalAPI `Client`): `decodeFromString`, not `decodeFromStream`; build.sh rejects any new stream decode | ≤23 |
-| 0006 | retired at 1.104.5: upstream workers implement `getForegroundInfo()` | 31 |
+| 0006 | retired at 1.104.5: upstream workers implement `getForegroundInfo()` | — |
 | 0007 | `coreLibraryDesugaring` for `java.time` | 26 |
 | 0008 | `BOOT_COMPLETED` receiver, standing in for always-on VPN | 24 |
 | 0009 | `getActiveNetwork` in the VPN-conflict check → `getAllNetworks` below 23 | 23 |
@@ -86,9 +88,6 @@ if any does not.
 | 0011 | `Notification.Builder(Context, String)` in `StartVPNWorker` → `NotificationCompat` | 26 |
 | 0012 | drop the debug-only `integration.LOGIN` broadcast (exported, no permission) | — (security) |
 | 0013 | `setUnderlyingNetworks(null)` below API 23, as 1.98.8 did (an empty array can stick if the network arrives during `establish()`) | 23 |
-
-1.104.5: 12 patches — 11 for API 22 (as many as 1.98.8's final series: 0006 retired, 0013
-added) plus 0012.
 
 Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
 these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
@@ -120,9 +119,10 @@ that large (28 KB here); State and Prefs are small and always decoded fine, so *
 silently never arrived while everything else worked**. The exception escaped the Go
 callback and the entire notification was dropped, with no error anywhere.
 
-From 1.104.5 the peer list arrives as an `InitialStatus` notification followed by deltas,
-and upstream catches a failed decode and logs `failed to process IPN notification`; the
-`InitialStatus` notification carries every peer and is the one that crosses 16 KB.
+From 1.104.5 the peer list arrives as deltas. `InitialStatus` comes before the backend is
+`Running` and carries no peers; the first `PeersChanged` update carries every peer and is the
+notification that can cross 16 KB on a large tailnet. Upstream now catches a failed decode
+and logs `failed to process IPN notification`.
 
 Upstream never meets this — it ships minSdk 26, above the API 24 fix. kotlinx.serialization
 became exposed only in 1.5.0, when `CharsetReader` was added as an optimization; Tailscale
@@ -159,9 +159,9 @@ adb shell am broadcast -a com.tailscale.ipn.DISCONNECT_VPN -n com.tailscale.ipn/
 adb shell am broadcast -a com.tailscale.ipn.CONNECT_VPN    -n com.tailscale.ipn/.IPNReceiver
 ```
 
-Confirm with `ip route show table <vpn table>` — expect ~46 `tun0` routes splitting
-`0.0.0.0/0` (`0.0.0.0/5`, `8.0.0.0/7`, `32.0.0.0/3`, `64.0.0.0/2`, …) with the local LAN
-carved out when `allowLanAccess=true`. The table number changes between installs; find it
+Confirm with `ip route show table <vpn table>` — expect ~46 routes on the tunnel's `tunN`
+splitting `0.0.0.0/0` (`0.0.0.0/5`, `8.0.0.0/7`, `32.0.0.0/3`, `64.0.0.0/2`, …) with the local
+LAN carved out when `allowLanAccess=true`. The table number changes between installs; find it
 via `ip rule`.
 
 ## Signing
@@ -227,7 +227,8 @@ see netmap, DERP, `wgcfg` and socket-binding activity. Kotlin crashes still go t
 ## Gotcha: poison-pill work items
 
 On builds without 0006 (early 1.98.8 builds; upstream fixed the cause at 1.104.5), a failed
-`USE_EXIT_NODE` broadcast persists a WorkManager job that crashes the app on **every** start. Clear it without losing the login:
+`USE_EXIT_NODE` broadcast persists a WorkManager job that crashes the app on **every** start.
+Clear it without losing the login:
 
 ```sh
 adb shell run-as com.tailscale.ipn rm -f databases/androidx.work.workdb*

@@ -8,7 +8,7 @@ end needs hardware.
 
 | Tier | What it catches | Runs | Command |
 |---|---|---|---|
-| 0 | a patch that no longer applies, shellcheck warnings, `verify-apk` regressions, the toolchain pins match upstream, no stream JSON decode remains | every PR, pushes to `main`, weekly upstream drift | `make check` |
+| 0 | a patch that no longer applies, shellcheck warnings, `verify-apk` regressions, stale toolchain pins, a stream JSON decode left in the patched tree | every PR, pushes to `main`, weekly upstream drift | `make check` |
 | 1 | build breaks, `NewApi` calls above API 22 (Android Lint), upstream unit tests | every PR, pushes to `main`, weekly upstream drift | `LINT=1 SKIP_TESTS=0 make build` |
 | 2 | API 22 runtime failures of each patch on an emulator, with no tailnet | PRs to `main`, pushes to `main` | `make build-emu emu-test` |
 | 3 | the same emulator logged in to a real tailnet: tunnel, peers, reboots, network changes | by hand, locally | `make build-emu emu-test-net` |
@@ -33,7 +33,7 @@ and keeps its logs in `.build/emu-test/`.
 | 0008 | 2 | a reboot while logged out: `BootReceiver` stays disconnected, no tunnel |
 | (login) | 3 | an auth key logs in; state `Running`; a `tun` interface has a tailnet address |
 | 0004 | 3 | sockets are protected (`VpnService.protect(fd=…) -> true`, never `false`); the host pings the emulator and the emulator pings the host |
-| 0005 | 3 | the InitialStatus notification decodes: the emulator's own address is in its peer list |
+| 0005 | 3 | the first `PeersChanged` update, which carries every peer, decodes (the debug build logs it), and the emulator's own address is in its peer list |
 | 0007 | 3 | a node's details show a formatted key expiry (`java.time` at runtime) |
 | 0010 | 3 | mobile data off and on while connected: a new default network, the tunnel still works |
 | 0013 | 3 | across that network change the app never sets the VPN's underlying network (the listener half; the device check covers `newBuilder()`) |
@@ -48,9 +48,10 @@ Known gaps:
 - **0007** at tier 2 is static, because its `java.time` calls need a netmap. Tier 3 runs them by
   opening the details of a node whose key expires; tagged nodes, like the emulator, never expire.
 - **0009** relies on a fresh install having no VPN consent, rather than revoking it.
-- **0005 at tier 3.** InitialStatus carries no DERP map, so on a small tailnet it may stay under
-  16 KB, and tier 3 then proves only that decoding works. The build-time guard against stream
-  decodes covers the call sites.
+- **0005 at tier 3.** The first `PeersChanged` update carries every peer (13 on the tailnet
+  used so far), which may stay under 16 KB, and tier 3 then proves only that decoding works.
+  The build-time guard against stream decodes covers the call sites; the release checklist
+  covers a large payload on hardware.
 - **0013 at tier 3.** Only the listener half is visible. `newBuilder()`'s `null` logs nothing,
   so it is checked on hardware.
 - **NewApi lint is blind inside `@RequiresApi(TIRAMISU)` functions** (upstream's
@@ -97,15 +98,21 @@ given an auth key through MDM. Use a short-expiry key if that matters to you.
 On a Fire TV Stick (Fire OS 5):
 
 - [ ] `scripts/device-check.sh` reports API 22 and GLES 2.0.
-- [ ] The release APK installs, and the armeabi-v7a native library loads: no
-      `UnsatisfiedLinkError`, no `SIGABRT` at start.
+- [ ] The release APK installs (uninstall first if the signer differs), and the armeabi-v7a
+      native library loads: no `UnsatisfiedLinkError`, no `SIGABRT` at start.
 - [ ] The UI renders and navigates on Mali-450 / GLES 2.0 with the remote's D-pad, and `logcat`
       has no `glerror`. The app appears in the Amazon launcher.
 - [ ] No Google Play services prompts or errors in `logcat` at start-up and login.
-- [ ] Log in; `tun0` is up; peers are listed; the stick is reachable from another device.
+- [ ] Log in; the tunnel is up; peers are listed; the stick is reachable from another device.
+      The tunnel is the `tunN` that `adb shell netcfg` lists as `UP` with a `100.x` address;
+      it can be `tun1` after a reconnect.
+- [ ] The tunnel stays up for at least 30 minutes.
+- [ ] Exit-node traffic shows on the tunnel's counters (see the tip in
+      [STATUS.md](STATUS.md#verified-end-to-end)).
 - [ ] A reboot while connected brings the tunnel back (0008) on Fire OS, and other apps still
       see a network: Settings › Network or a streaming app shows connected (0013).
-- [ ] Exit-node traffic shows on the `tun0` counters (see the tip in
-      [STATUS.md](STATUS.md#verified-end-to-end)).
+- [ ] A disconnect followed by a reboot stays down.
+- [ ] `logcat` has no `failed to process IPN notification` and no `Bad position` (0005 on a
+      real tailnet's peer list).
 
 Everything else is covered by tiers 0-3.
