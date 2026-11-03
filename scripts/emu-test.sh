@@ -91,7 +91,7 @@ pass "0007 java.time is desugared (j\$.time in the dex)"
 # Validation only, before the first adb call, so no adb server is forked with the key in
 # its environment.
 if [ "$NET" = 1 ]; then
-  [ -n "${TS_AUTHKEY:-}" ] || die "EMU_NET=1 needs TS_AUTHKEY (environment, or .env for make emu-test-net)"
+  [ -n "${TS_AUTHKEY:-}" ] || die "EMU_NET=1 needs TS_AUTHKEY (environment, or .env for make emu-test-net; check .env's syntax)"
   [[ "$TS_AUTHKEY" =~ ^tskey-auth-[A-Za-z0-9_-]+$ ]] || die "TS_AUTHKEY is not a tskey-auth-… key"
   export -n TS_AUTHKEY        # a shell variable from here on: no child process inherits it
   ts() { "${TAILSCALE:-tailscale}" "$@"; }   # this host's CLI; tier 3 only
@@ -148,8 +148,11 @@ app_lines() {  # app_lines < DUMP: the lines logged by the app's processes; fail
   printf '%s\n' "$l" | awk -v re="^($pids)\$" '$3 ~ re'
 }
 app_log() { log | app_lines; }   # this boot
-crash_filter() {   # public CI logs in net mode: drop netmap text (kotlinx JSON excerpts, names, tailnet IPs)
-  if [ "$NET" = 1 ] && [ "${CI:-}" = true ]; then sed -E 's/(JSON input: ).*/\1<redacted>/; s/[A-Za-z0-9.-]+\.ts\.net/<redacted>/g; s/100\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g'; else cat; fi
+crash_filter() {   # public CI logs in net mode: drop netmap text (kotlinx JSON excerpts, names, emails, tailnet IPs)
+  if [ "$NET" = 1 ] && [ "${CI:-}" = true ]; then
+    sed -E 's/(JSON input: ).*/\1<redacted>/; s/[A-Za-z0-9.-]+\.ts\.net/<redacted>/g; s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+/<email>/g
+      s/100\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g; s/fd7a:115c:a1e0:[0-9a-fA-F:]*/<ip6>/g'
+  else cat; fi
 }
 SCAN=0        # 1 while the app runs: every wait then also fails fast on a crash
 no_crash() {  # die on a crash, a native fatal signal, a failed worker or a missing API
@@ -462,7 +465,7 @@ if [ "$NET" = 1 ]; then
   # 0010: a network change while connected; the tunnel must follow the new network.
   data_toggle 0010
   wait_for 60 "host -> emulator after the network change" reachable "$EMU_IP"
-  tun_up || die "0010: tun0 is gone after the network change"
+  tun_up || die "0010: tun0 is gone after the network change (or netcfg failed)"
   pass "0010 network change while connected: $old -> $(default_net), tunnel kept"
 
   # 0008: reboot while connected. BootReceiver restarts the VPN without the app being opened.

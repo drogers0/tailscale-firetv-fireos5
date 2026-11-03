@@ -7,8 +7,8 @@ same commands locally and in CI; only the release checklist at the end needs har
 
 | Tier | What it catches | Runs | Command |
 |---|---|---|---|
-| 0 | a patch that no longer applies, shellcheck warnings, `verify-apk` regressions | every PR | `make check` |
-| 1 | build breaks, `NewApi` calls above API 22 (Android Lint), upstream unit tests | every PR | `LINT=1 SKIP_TESTS=0 make build` |
+| 0 | a patch that no longer applies, shellcheck warnings, `verify-apk` regressions | every PR, pushes to `main`, weekly upstream drift | `make check` |
+| 1 | build breaks, `NewApi` calls above API 22 (Android Lint), upstream unit tests | every PR, pushes to `main`, weekly upstream drift | `LINT=1 SKIP_TESTS=0 make build` |
 | 2 | API 22 runtime failures of each patch on an emulator, with no tailnet | PRs to `main`, pushes to `main` | `make build-emu emu-test` |
 | 3 | the same emulator logged in to a real tailnet: tunnel, peers, reboots, network changes | by hand | `make build-emu emu-test-net`, or the "Tier 3" workflow |
 
