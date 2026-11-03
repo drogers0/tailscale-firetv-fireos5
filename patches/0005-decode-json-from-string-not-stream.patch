@@ -36,7 +36,7 @@ index 146a1a0..2b846aa 100644
                      } catch (t: Throwable) {
                        Result.failure(t)
 diff --git a/android/src/main/java/com/tailscale/ipn/ui/notifier/Notifier.kt b/android/src/main/java/com/tailscale/ipn/ui/notifier/Notifier.kt
-index 8844ae0..8c28ac8 100644
+index 8844ae0..c862585 100644
 --- a/android/src/main/java/com/tailscale/ipn/ui/notifier/Notifier.kt
 +++ b/android/src/main/java/com/tailscale/ipn/ui/notifier/Notifier.kt
 @@ -24,8 +24,8 @@ import kotlinx.coroutines.flow.StateFlow
@@ -64,9 +64,9 @@ index 8844ae0..8c28ac8 100644
 +              // Google fixed this at API 24. See kotlinx.serialization#2457.
 +              //
 +              // The slice only appears on the loop's second pass, so the payload must
-+              // exceed the 16KB internal buffer; size alone is the trigger. The
-+              // InitialStatus notification carries every peer and is that large on a
-+              // real tailnet; the failure is logged below and the peer list never fills.
++              // exceed the 16KB internal buffer; size alone is the trigger. The first
++              // PeersChanged update carries every peer and is that large on a real
++              // tailnet; the failure is logged below and the peer list never fills.
 +              val notify = decoder.decodeFromString<Notify>(String(notification, Charsets.UTF_8))
                notify.State?.let { state.set(Ipn.State.fromInt(it)) }
                if (BuildConfig.DEBUG) {

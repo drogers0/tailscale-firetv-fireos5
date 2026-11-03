@@ -130,12 +130,16 @@ export ANDROID_SERIAL="emulator-$PORT"
 # never waits for it.
 ADB_TIMEOUT=30        # seconds per call; adb install passes its own
 adb() {
-  local rc=0 pid i
+  local rc=0 pid w i
   "$SDK/platform-tools/adb" "$@" &
   pid=$!
   ( for ((i = 0; i < ADB_TIMEOUT; i++)); do sleep 1; kill -0 "$pid" || exit 0; done
     kill "$pid" ) >/dev/null 2>&1 &
+  w=$!
   wait "$pid" || rc=$?
+  # Stop the watcher now, before adb's PID can be reused; reaping it keeps bash 3.2 from
+  # reporting "Terminated".
+  kill "$w" 2>/dev/null && wait "$w" 2>/dev/null || true
   [ "$rc" != 143 ] || printf 'adb %s: no answer in %ss; killed\n' "$1" "$ADB_TIMEOUT" >&2
   return "$rc"
 }
@@ -260,12 +264,13 @@ running() {    # Running; die at once, with a fixed message, if control rejected
 }
 policy_reads() { local a; a="$(app_log)" || die "login: no $PKG process in this boot's log"; printf '%s\n' "$a" | grep -c 'setting opts.AuthKey by syspolicy' || true; }
 more_reads() { local n; n="$(policy_reads)" || exit 1; [ "$n" -gt "$1" ]; }   # policy_reads printed why
-tun_ip() {     # the VPN interface's address if one is UP; fails if netcfg gave no output
-  # Not just tun0: each establish() makes a new tunN, and 1.104.5 calls it twice in a row at boot.
+tun_ip() {     # the tailnet address of an UP tunN, if any; fails if netcfg gave no output
+  # Not just tun0: each establish() makes a new tunN, and upstream (from 1.104.5) calls it twice
+  # in a row when it connects, so the tunnel can be tun1 while a superseded tun0 lingers.
   local nc; nc="$(ifaces)" || return 1
-  printf '%s\n' "$nc" | awk '$1 ~ /^tun[0-9]+$/ && $2 == "UP" { split($3, a, "/"); print a[1]; exit }'
+  printf '%s\n' "$nc" | awk '$1 ~ /^tun[0-9]+$/ && $2 == "UP" && $3 ~ /^100\./ { split($3, a, "/"); print a[1]; exit }'
 }
-tun_up()     { local ip; ip="$(tun_ip)" || return 1; case "$ip" in 100.*) ;; *) return 1 ;; esac; }
+tun_up()     { local ip; ip="$(tun_ip)" || return 1; [ -n "$ip" ]; }
 tun_down()   { local ip; ip="$(tun_ip)" || return 1; [ -z "$ip" ]; }
 is_root()    { adb shell id 2>/dev/null | grep -F 'uid=0(' >/dev/null; }
 dev_ok() {     # dev_ok CMD: CMD succeeded on the device (adb shell exits 0 on API 22; restorecon chats)
@@ -408,8 +413,7 @@ adb shell input keyevent KEYCODE_HOME             # leave the login page it open
 # disconnected (WantRunning=false), with no crash and no tunnel.
 reboot_app 0008
 wait_log "0008 BootReceiver's decision" "BootReceiver: boot: WantRunning=false; staying disconnected" 60
-nc="$(ifaces)" || die "0008: netcfg listed no interfaces"
-printf '%s\n' "$nc" | grep -E '^tun[0-9]+ ' >/dev/null && die "0008: a tun interface is up while logged out"
+tun_down || die "0008: a tunnel is up while logged out (or netcfg failed)"
 no_crash 0008
 pass "0008 reboot while logged out: BootReceiver stays disconnected, no crash, no tunnel"
 log > "$OUT/logcat-boot$BOOT.txt"
@@ -454,10 +458,12 @@ if [ "$NET" = 1 ]; then
   no_crash 0004
   pass "0004 sockets protected; tunnel traffic both ways"
 
-  # 0005: the InitialStatus notification (peers and users) decodes; with no 'failed to process
-  # IPN notification' anywhere, the peer list is built from it, with this device first.
+  # 0005: the first PeersChanged update, which carries every peer (InitialStatus arrives before
+  # Running, with none), decodes: the debug build logs it only after a successful decode, and
+  # no_crash fails on 'failed to process IPN notification'. The peer list is built from it.
+  wait_log "0005 the first PeersChanged update decoded" "received bus update: .*peersChanged=[1-9]"
   wait_for 30 "0005 this device in the peer list" ui_has "$EMU_IP"
-  pass "0005 InitialStatus decoded: peer list shown"
+  pass "0005 peer list decoded (PeersChanged)"
 
   # 0007: peer details format a key expiry with java.time (TimeUtil).
   wait_for 90 "the 0007 target in the emulator's peer list (can tag:fireos-ci see the expiring node this host sees?)" \

@@ -132,7 +132,9 @@ done
 # 0005's bug class, which NewApi lint cannot see: below API 24, decoding JSON from a
 # stream (decodeFromStream, decodeToSequence) fails on any body over 16 KB. A call site
 # upstream adds must join 0005 before it ships.
-hits="$(cd "$SRC" && grep -rlE 'decode(FromStream|ToSequence) *[<(]' android/src/main || true)"
+# grep exits 1 for no match and 2 when it cannot scan; only the first is a pass.
+hits="$(cd "$SRC" && grep -rlE 'decode(FromStream|ToSequence) *[<(]' android/src/main)" \
+  || [ $? = 1 ] || die "cannot scan $TS_REF's android/src/main for stream JSON decodes"
 [ -z "$hits" ] || die "stream JSON decode called in ${hits//$'\n'/, }; extend patch 0005"
 if [ "$PATCH_ONLY" = 1 ]; then
   bold "Patch check passed for $TS_REF (${#PATCHES[@]} patches)"
