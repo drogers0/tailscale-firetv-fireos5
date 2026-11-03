@@ -13,6 +13,8 @@ end needs hardware.
 | 2 | API 22 runtime failures of each patch on an emulator, with no tailnet | PRs to `main`, pushes to `main` | `make build-emu emu-test` |
 | 3 | the same emulator logged in to a real tailnet: tunnel, peers, reboots, network changes | by hand, locally | `make build-emu emu-test-net` |
 
+A PR that changes only Markdown files or `docs/` skips tiers 0-2.
+
 Tiers 2 and 3 boot an API 22 `google_apis` emulator (x86_64 under KVM in CI, arm64-v8a on Apple
 Silicon) with its own AVD (`tsfire-api22`) on port 5584, so other emulators are never touched.
 One script, `scripts/emu-test.sh`, runs both. It stops at the first failure

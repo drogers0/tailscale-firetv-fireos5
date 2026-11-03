@@ -17,8 +17,30 @@ env:                          # empty on PR/push: build.sh falls back to its pin
   TS_REF: ${{ inputs.ts_ref }}
   PATCH_SERIES: ${{ inputs.patch_series }}
 jobs:
+  changes:
+    # Docs-only PRs skip every tier. A job skipped by its `if` counts as passed for required
+    # checks, which a workflow-level paths-ignore would leave pending forever.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.c.outputs.code }}
+    steps:
+      - id: c
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          code=true
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')"
+            [ -n "$files" ] || { echo "::error::no changed files listed for PR $PR"; exit 1; }
+            printf '%s\n' "$files" | grep -vE '\.md$|^docs/' >/dev/null || code=false
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
   check:
     name: Tier 0 · static checks
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -29,7 +51,7 @@ jobs:
     name: Tier 1 · build, NewApi lint, unit tests
     needs: check
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 25        # cold runs take about 8 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -64,7 +86,7 @@ jobs:
       (github.event_name == 'pull_request' && github.base_ref == 'main') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 25        # cold runs take about 9 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
