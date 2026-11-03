@@ -22,10 +22,9 @@
 #
 # The same script runs locally and in CI. It always creates its own AVD (tsfire-api22,
 # recreated each run so every run starts logged out with no VPN consent; with EMU_NET=1 it
-# is also deleted at exit) on its own port,
-# and stops that emulator on exit, so other emulators are never touched. Logs go to
-# $WORKDIR/emu-test/ (default .build); on failure it also saves a screenshot, a UI dump
-# and dumpsys output.
+# is also deleted at exit) on its own port, and stops that emulator on exit, so other
+# emulators are never touched. Logs go to $WORKDIR/emu-test/ (default .build); on failure
+# it also saves a screenshot, a UI dump and dumpsys output.
 
 set -euo pipefail
 
@@ -38,6 +37,7 @@ AVD=tsfire-api22
 PORT=5584             # serial emulator-5584; away from the default 5554 a developer uses
 PKG=com.tailscale.ipn
 BOOT_TIMEOUT=300
+NET="${EMU_NET:-0}"   # 1 = tier 3, on a real tailnet
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$REPO_ROOT/${WORKDIR:-.build}/emu-test"
@@ -48,7 +48,6 @@ bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 pass() { printf '\033[32mPASS\033[0m %s\n' "$*"; }
-NET="${EMU_NET:-0}"
 skip() { printf '\033[33mSKIP\033[0m %s\n' "$*"; [ "${CI:-}" != true ] || echo "::warning::SKIP $*"; }
 
 EMU_ARCH="${EMU_ARCH:-$(uname -m)}"
@@ -95,7 +94,7 @@ if [ "$NET" = 1 ]; then
   [ -n "${TS_AUTHKEY:-}" ] || die "EMU_NET=1 needs TS_AUTHKEY (environment, or .env for make emu-test-net)"
   [[ "$TS_AUTHKEY" =~ ^tskey-auth-[A-Za-z0-9_-]+$ ]] || die "TS_AUTHKEY is not a tskey-auth-… key"
   export -n TS_AUTHKEY        # a shell variable from here on: no child process inherits it
-  ts() { "${TAILSCALE:-tailscale}" "$@"; }
+  ts() { "${TAILSCALE:-tailscale}" "$@"; }   # this host's CLI; tier 3 only
   HOST_IP="$(ts ip -4 2>/dev/null | head -1)" || true
   [ -n "$HOST_IP" ] || die "this host is not on a tailnet (or set TAILSCALE to its CLI)"
   st="$(ts status --json 2>/dev/null)" || die "'tailscale status --json' failed on this host"
@@ -149,8 +148,8 @@ app_lines() {  # app_lines < DUMP: the lines logged by the app's processes; fail
   printf '%s\n' "$l" | awk -v re="^($pids)\$" '$3 ~ re'
 }
 app_log() { log | app_lines; }   # this boot
-crash_filter() {   # public CI logs in net mode: drop kotlinx's JSON excerpts, which can carry netmap text
-  if [ "$NET" = 1 ] && [ "${CI:-}" = true ]; then sed -E 's/(JSON input: ).*/\1<redacted>/'; else cat; fi
+crash_filter() {   # public CI logs in net mode: drop netmap text (kotlinx JSON excerpts, names, tailnet IPs)
+  if [ "$NET" = 1 ] && [ "${CI:-}" = true ]; then sed -E 's/(JSON input: ).*/\1<redacted>/; s/[A-Za-z0-9.-]+\.ts\.net/<redacted>/g; s/100\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g'; else cat; fi
 }
 SCAN=0        # 1 while the app runs: every wait then also fails fast on a crash
 no_crash() {  # die on a crash, a native fatal signal, a failed worker or a missing API
@@ -229,18 +228,27 @@ ifaces() {   # netcfg; adb shell exits 0 even on failure (empty output), so requ
 }
 default_net() { app_log | grep -oE 'cachedDefaultNetwork=[0-9]+' | tail -1 | grep -oE '[0-9]+' || true; }
 new_default_net() { local n; n="$(default_net)"; [ -n "$n" ] && [ "$n" != "$1" ]; }
+data_toggle() {  # data_toggle LABEL: mobile data off and on; sets old and waits for a new default network
+  old="$(default_net)"
+  [ -n "$old" ] || die "$1: no default network logged before the data toggle"
+  adb shell svc data disable
+  wait_log "network $old lost" "onLost: network $old"
+  adb shell svc data enable
+  wait_for 60 "$1 a new default network" new_default_net "$old"
+}
 
 # Tier 3 (EMU_NET=1).
+last_state() { grep -oE 'Switching ipn state [A-Za-z]+ -> [A-Za-z]+' | tail -1 | awk '{print $NF}'; }   # stdin: app log
 in_state() {   # in_state STATE: the last ipn state switch this boot is to STATE
   local a; a="$(app_log)" || die "ipn state: no $PKG process in this boot's log"
-  [ "$(printf '%s\n' "$a" | grep -oE 'Switching ipn state [A-Za-z]+ -> [A-Za-z]+' | tail -1 | awk '{print $NF}')" = "$1" ]
+  [ "$(printf '%s\n' "$a" | last_state)" = "$1" ]
 }
 running() {    # Running; die at once, with a fixed message, if control rejected the key
   local a; a="$(app_log)" || die "login: no $PKG process in this boot's log"
   # Fixed message: the server's text can include a key ID.
   printf '%s\n' "$a" | grep -E 'Received error: (invalid key|register request: http 4[0-9]{2})' >/dev/null \
     && die "control rejected TS_AUTHKEY (expired, revoked or already used?)"
-  in_state Running
+  [ "$(printf '%s\n' "$a" | last_state)" = Running ]
 }
 policy_reads() { local a; a="$(app_log)" || die "login: no $PKG process in this boot's log"; printf '%s\n' "$a" | grep -c 'setting opts.AuthKey by syspolicy' || true; }
 more_reads() { local n; n="$(policy_reads)" || exit 1; [ "$n" -gt "$1" ]; }   # policy_reads printed why
@@ -256,7 +264,6 @@ dev_ok() {     # dev_ok CMD: CMD succeeded on the device (adb shell exits 0 on A
 }
 reachable()  { ts ping --icmp -c 1 --timeout 5s "$1" >/dev/null 2>&1; }            # host -> emulator
 emu_reaches() { adb shell ping -c 3 -W 5 "$1" | grep -E ' [1-9][0-9]* received' >/dev/null; }
-ui_match()   { ui_dump | grep -E "text=\"($1)\"" >/dev/null; }    # REGEX against whole node texts
 list_box() {   # stdin: a UI dump. Prints "x top bottom" of the first scrollable node (the list)
   tr '>' '\n' | grep -F 'scrollable="true"' | head -1 | grep -oE 'bounds="[^"]*"' \
     | tr -c '0-9' ' ' | awk '{ print int(($1 + $3) / 2), $2, $4 }'
@@ -311,7 +318,7 @@ finish() {
   fi
   if [ -n "${EMU_PID:-}" ] && kill -0 "$EMU_PID" 2>/dev/null; then
     adb emu kill >/dev/null 2>&1 || kill "$EMU_PID" 2>/dev/null || true
-    for _ in $(seq 30); do kill -0 "$EMU_PID" 2>/dev/null || break; sleep 1; done
+    for _ in {1..30}; do kill -0 "$EMU_PID" 2>/dev/null || break; sleep 1; done
     if kill -0 "$EMU_PID" 2>/dev/null; then kill -9 "$EMU_PID" 2>/dev/null || true; fi   # still up after 30 s
     wait "$EMU_PID" 2>/dev/null || true
   fi
@@ -372,12 +379,7 @@ pass "0009 consent denied: 'VPN permission needed', no crash"
 tap_text Cancel
 
 # 0010: losing the network and getting a new one must move the default network.
-old="$(default_net)"
-[ -n "$old" ] || die "0010: no default network logged before the data toggle"
-adb shell svc data disable
-wait_log "network $old lost" "onLost: network $old"
-adb shell svc data enable
-wait_for 60 "0010 a new default network" new_default_net "$old"
+data_toggle 0010
 pass "0010 data off/on: default network $old -> $(default_net)"
 
 # 0001 + 0003: grant consent through appops (what the dialog's OK does), then start the
@@ -426,7 +428,7 @@ if [ "$NET" = 1 ]; then
   wait_for 30 "login to take the key from the AuthKey restriction" more_reads "$n"
   wait_for 90 "state Running" running
   wait_for 30 "tun0 with a tailnet address" tun_up
-  EMU_IP="$(tun_ip)"
+  EMU_IP="$(tun_ip)" || die "login: netcfg failed"
   dev_ok "rm $RES && [ ! -e $RES ]" || die "could not remove the AuthKey restriction"
   pass "login with an auth key: Running, tun0 $EMU_IP"
 
@@ -441,7 +443,7 @@ if [ "$NET" = 1 ]; then
 
   # 0005: the netmap (well over 16 KB with a real DERP map) decodes; the peer list is built
   # from it, with this device first.
-  wait_for 30 "0005 this device in the peer list" ui_match "${EMU_IP//./\\.}"
+  wait_for 30 "0005 this device in the peer list" ui_has "$EMU_IP"
   pass "0005 netmap decoded: peer list shown"
 
   # 0007: peer details format a key expiry with java.time (TimeUtil).
@@ -458,12 +460,7 @@ if [ "$NET" = 1 ]; then
   fi
 
   # 0010: a network change while connected; the tunnel must follow the new network.
-  old="$(default_net)"
-  [ -n "$old" ] || die "0010: no default network logged"
-  adb shell svc data disable
-  wait_log "network $old lost" "onLost: network $old"
-  adb shell svc data enable
-  wait_for 60 "a new default network" new_default_net "$old"
+  data_toggle 0010
   wait_for 60 "host -> emulator after the network change" reachable "$EMU_IP"
   tun_up || die "0010: tun0 is gone after the network change"
   pass "0010 network change while connected: $old -> $(default_net), tunnel kept"
@@ -473,7 +470,8 @@ if [ "$NET" = 1 ]; then
   wait_log "0008 BootReceiver reconnecting" "BootReceiver: boot: WantRunning=true" 60
   wait_for 90 "state Running after boot" in_state Running
   wait_for 30 "tun0 after boot" tun_up
-  [ "$(tun_ip)" = "$EMU_IP" ] || die "0008: tailnet address changed across the reboot"
+  ip="$(tun_ip)" || die "0008: netcfg failed"
+  [ "$ip" = "$EMU_IP" ] || die "0008: tailnet address changed across the reboot"
   wait_for 60 "host -> emulator after boot" reachable "$EMU_IP"
   pass "0008 reboot while connected: tunnel back without opening the app"
 

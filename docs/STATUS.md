@@ -50,6 +50,9 @@ unavailable here (`settings get secure always_on_vpn_app` returns `null` on Fire
 
 **0008** adds that receiver below API 24. It reconnects only if the VPN was left on and
 consent is still granted, and needs one app launch after install or a force-stop.
+On the API 22 emulator, tier 3 checks both cases, a reboot while connected and a disconnect
+followed by a reboot ([TESTING.md](TESTING.md)); the Fire TV itself is still unverified, and the
+check is on the release checklist.
 
 > [!TIP]
 > **Workaround:** open the Tailscale app once after a reboot. Everything else persists —

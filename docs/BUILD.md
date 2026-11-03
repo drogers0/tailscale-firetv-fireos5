@@ -101,7 +101,7 @@ Tunables stay environment variables read by `scripts/build.sh`; `make build TS_R
 | `ANDROID_SDK_ROOT` | `~/Library/Android/sdk` (mac), `~/Android/Sdk` (linux) | SDK location |
 | `JAVA_HOME` | autodetected JDK 17 | |
 | `WORKDIR` | `.build` | scratch checkout, one dir per ref |
-| `DIST` | `dist` | APK output dir, absolute or relative to the repo root; `make build-emu` and `make emu-test` use the Makefile's `EMU_DIST` (`.build/dist-emu`), `make lint` uses `LINT_DIST` (`.build/dist-lint`). An APK already at the output path is overwritten only if it is debug-signed, so a release-signed one is never replaced |
+| `DIST` | `dist` | APK output dir, absolute or relative to the repo root; `make build-emu`, `emu-test` and `emu-test-net` use the Makefile's `EMU_DIST` (`.build/dist-emu`), `make lint` uses `LINT_DIST` (`.build/dist-lint`). An APK already at the output path is overwritten only if it is debug-signed, so a release-signed one is never replaced |
 | `SKIP_TESTS` | `1` | set `0` to run upstream unit tests (debug variant) |
 | `LINT` | `0` | `1` runs Android Lint, `NewApi` only, with the series' `lint.xml` ignores |
 | `PATCH_SERIES` | empty | a directory under `patches/` that overrides the by-ref lookup |

@@ -29,15 +29,16 @@ build-emu:
 emu-test:
 	EMU_ARCH=$(EMU_ARCH) DIST="$(EMU_DIST)" scripts/emu-test.sh
 
-# Tier 3: emu-test, then log in to a real tailnet. Needs TS_AUTHKEY, from the environment or a
-# gitignored .env (shell KEY=value lines), loaded here only so no other target sees it. The
-# environment wins. Never pass TS_AUTHKEY on the make command line: argv and MAKEFLAGS would
+# Tier 3: emu-test, then log in to a real tailnet. Needs TS_AUTHKEY (and optionally TAILSCALE,
+# the host's CLI), from the environment or a gitignored .env (shell KEY=value lines), loaded here
+# only so no other target sees it; its errors are silenced so a bad line never echoes the key.
+# The environment wins. Never pass TS_AUTHKEY on the make command line: argv and MAKEFLAGS would
 # carry it into every recipe. Usually: make build-emu emu-test-net
 emu-test-net:
 	@k="$${TS_AUTHKEY-}" t="$${TAILSCALE-}"; \
 	if [ -f .env ]; then \
-	  [ -n "$$k" ] || k="$$(. ./.env >/dev/null; printf %s "$${TS_AUTHKEY-}")"; \
-	  [ -n "$$t" ] || t="$$(. ./.env >/dev/null; printf %s "$${TAILSCALE-}")"; \
+	  [ -n "$$k" ] || k="$$(. ./.env >/dev/null 2>&1; printf %s "$${TS_AUTHKEY-}")"; \
+	  [ -n "$$t" ] || t="$$(. ./.env >/dev/null 2>&1; printf %s "$${TAILSCALE-}")"; \
 	fi; \
 	TS_AUTHKEY="$$k" TAILSCALE="$$t" EMU_NET=1 EMU_ARCH=$(EMU_ARCH) DIST="$(EMU_DIST)" scripts/emu-test.sh
 

@@ -56,9 +56,9 @@ Known gaps:
   each other.
 - **Key:** an auth key that is reusable, ephemeral and tagged `tag:fireos-ci`.
 - **`.env`:** put `TS_AUTHKEY=<auth key>` in `.env` at the repo root and `chmod 600 .env`. It
-  is gitignored, only `make emu-test-net` reads it, and an exported `TS_AUTHKEY` wins. Never pass
-  the key as `make emu-test-net TS_AUTHKEY=…`: make's argv and `MAKEFLAGS` would carry it into
-  every recipe.
+  is gitignored, only `make emu-test-net` reads it, and an exported `TS_AUTHKEY` wins.
+  `TAILSCALE=<path>` can go there too. Never pass the key as `make emu-test-net TS_AUTHKEY=…`:
+  make's argv and `MAKEFLAGS` would carry it into every recipe.
 
 ```sh
 make build-emu emu-test-net
@@ -80,7 +80,8 @@ given an auth key through MDM. Use a short-expiry key if that matters to you.
 1. Create an OAuth client in the admin console (Settings → OAuth clients) with the **Auth Keys**
    scope set to write and the tag `tag:fireos-ci`, and nothing else.
 2. Add it to the repository as the Actions secrets `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET`.
-3. Run it from Actions → Tier 3 → Run workflow, or `gh workflow run tailnet.yml --ref <branch>`.
+3. Run it from Actions → Tier 3 → Run workflow, or `gh workflow run tailnet.yml --ref <branch>`
+   (both need the workflow on `main` first).
 
 The runner joins the tailnet through `tailscale/github-action`, and the workflow mints a
 single-use, ephemeral, one-hour key for the emulator on each run.
