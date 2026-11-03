@@ -1,0 +1,57 @@
+name: Tier 3
+# Started by hand only, so secrets never reach fork PRs. Needs the TS_OAUTH_CLIENT_ID and
+# TS_OAUTH_SECRET repository secrets: an OAuth client with the auth_keys scope and tag:fireos-ci
+# (docs/TESTING.md).
+on: workflow_dispatch
+permissions:
+  contents: read
+concurrency:
+  group: tailnet
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash               # adds pipefail
+jobs:
+  tailnet:
+    name: Tier 3 · API 22 emulator on a tailnet
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup-build
+        with:
+          cache-key: emulator      # the same amd64 build as tier 2; save-sdk stays 'false'
+      - uses: ./.github/actions/setup-emulator   # save stays 'false': restore only
+      - run: make build-emu        # no secrets in this step's environment
+      - uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4.3.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:fireos-ci
+      - name: make emu-test-net
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+        run: |
+          api=https://api.tailscale.com/api/v2
+          # Credentials reach curl through files, never a command line.
+          tok="$(curl -fsS "$api/oauth/token" \
+            --data-urlencode client_id@<(printf %s "$TS_OAUTH_CLIENT_ID") \
+            --data-urlencode client_secret@<(printf %s "$TS_OAUTH_SECRET") | jq -er .access_token)" \
+            || { echo "::error::OAuth token request failed (check TS_OAUTH_CLIENT_ID/TS_OAUTH_SECRET)"; exit 1; }
+          echo "::add-mask::$tok"
+          unset TS_OAUTH_CLIENT_ID TS_OAUTH_SECRET
+          h="$RUNNER_TEMP/ts-auth"
+          (umask 077; printf 'Authorization: Bearer %s\n' "$tok" > "$h")
+          # The emulator's key: single-use and ephemeral; useless after this run either way.
+          # No -f: keep the error body, which never holds a key, to report the API's reason.
+          resp="$(curl -sS -H @"$h" -H 'Content-Type: application/json' "$api/tailnet/-/keys" \
+            -d '{"description":"tier 3 emulator","expirySeconds":3600,"capabilities":{"devices":{"create":{"reusable":false,"ephemeral":true,"preauthorized":true,"tags":["tag:fireos-ci"]}}}}')" \
+            || resp=
+          rm -f "$h"
+          key="$(jq -er .key <<<"$resp" 2>/dev/null)" || {
+            echo "::error::auth key request failed: $(jq -r '.message // empty' <<<"$resp" 2>/dev/null) (the OAuth client needs writable auth_keys and tag:fireos-ci)"
+            exit 1; }
+          echo "::add-mask::$key"
+          TS_AUTHKEY="$key" make emu-test-net

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 #
-# Emulator smoke tests for the API 22 patch series, with no tailnet. Boots a fresh
-# Android 5.1 (API 22) emulator, installs the `make build-emu` APK, and checks each patch's
-# behaviour over adb: logcat, dumpsys, appops, and uiautomator text lookups where a tap is
-# unavoidable (never screen coordinates).
+# Emulator smoke tests for the API 22 patch series, with no tailnet (EMU_NET=1 adds a real
+# tailnet). Boots a fresh Android 5.1 (API 22) emulator, installs the `make build-emu` APK,
+# and checks each patch's behaviour over adb: logcat, dumpsys, appops, and uiautomator text
+# lookups where a tap is unavoidable (never screen coordinates for taps; list scrolls are
+# slow drags inside the list's own bounds from the UI dump).
 #
-# Usage: ./scripts/emu-test.sh [apk]    # default: the newest $DIST/*-<emulator ABI>.apk
+# Usage: [EMU_NET=1] ./scripts/emu-test.sh [apk]    # default: the newest $DIST/*-<emulator ABI>.apk
 #
 # Environment:
 #   EMU_ARCH          amd64 (x86_64 image, CI) or arm64 (arm64-v8a image, Apple Silicon);
@@ -13,9 +14,15 @@
 #   DIST              where `make build-emu` puts its APK (relative paths are from the repo
 #                     root); default .build/dist-emu (under WORKDIR), the same as the Makefile.
 #   ANDROID_SDK_ROOT  as for build.sh. Missing emulator packages are installed into it.
+#   EMU_NET           1 = afterwards, log in to a real tailnet and run the tier 3 checks
+#                     (make emu-test-net). Then also:
+#   TS_AUTHKEY        EMU_NET=1: the emulator's auth key (tagged, ephemeral; docs/TESTING.md)
+#   TAILSCALE         EMU_NET=1: this host's tailscale CLI, if not `tailscale` on PATH. The
+#                     host must be on the same tailnet: the checks ping the emulator from it.
 #
 # The same script runs locally and in CI. It always creates its own AVD (tsfire-api22,
-# recreated each run so every run starts logged out with no VPN consent) on its own port,
+# recreated each run so every run starts logged out with no VPN consent; with EMU_NET=1 it
+# is also deleted at exit) on its own port,
 # and stops that emulator on exit, so other emulators are never touched. Logs go to
 # $WORKDIR/emu-test/ (default .build); on failure it also saves a screenshot, a UI dump
 # and dumpsys output.
@@ -41,6 +48,8 @@ bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 pass() { printf '\033[32mPASS\033[0m %s\n' "$*"; }
+NET="${EMU_NET:-0}"
+skip() { printf '\033[33mSKIP\033[0m %s\n' "$*"; [ "${CI:-}" != true ] || echo "::warning::SKIP $*"; }
 
 EMU_ARCH="${EMU_ARCH:-$(uname -m)}"
 case "$EMU_ARCH" in
@@ -79,6 +88,34 @@ n="$(unzip -p "$APK" 'classes*.dex' | LC_ALL=C grep -ac 'Lj\$/time/')" || true
 [ "${n:-0}" -gt 0 ] || die "0007: no desugared j\$.time classes in the dex"
 pass "0007 java.time is desugared (j\$.time in the dex)"
 
+# ---- 1b. tailnet preflight (EMU_NET=1) --------------------------------------
+# Validation only, before the first adb call, so no adb server is forked with the key in
+# its environment.
+if [ "$NET" = 1 ]; then
+  [ -n "${TS_AUTHKEY:-}" ] || die "EMU_NET=1 needs TS_AUTHKEY (environment, or .env for make emu-test-net)"
+  [[ "$TS_AUTHKEY" =~ ^tskey-auth-[A-Za-z0-9_-]+$ ]] || die "TS_AUTHKEY is not a tskey-auth-… key"
+  export -n TS_AUTHKEY        # a shell variable from here on: no child process inherits it
+  ts() { "${TAILSCALE:-tailscale}" "$@"; }
+  HOST_IP="$(ts ip -4 2>/dev/null | head -1)" || true
+  [ -n "$HOST_IP" ] || die "this host is not on a tailnet (or set TAILSCALE to its CLI)"
+  st="$(ts status --json 2>/dev/null)" || die "'tailscale status --json' failed on this host"
+  # 0007: java.time runs where the app formats a key expiry. Tagged nodes (the emulator, a CI
+  # runner) never expire, so pick this host, or else a peer, whose key does. Mullvad nodes
+  # (Location) are not listed by the app, and sharee nodes are not visible to a tagged node.
+  # The IP is used to find the node on the emulator and is never printed.
+  read -r T0007 T0007_WHO < <(printf '%s' "$st" | python3 -I -c '
+import json, sys
+s = json.load(sys.stdin)
+for who, n in [("host", s["Self"])] + [("a peer", p) for p in (s.get("Peer") or {}).values()]:
+    ips = [i for i in n.get("TailscaleIPs") or [] if "." in i]
+    if n.get("KeyExpiry") and ips and not n.get("Location") and not n.get("ShareeNode"):
+        print(ips[0], who)
+        break') || true
+  if [ -z "${T0007:-}" ] && [ "${CI:-}" != true ]; then
+    die "no node with an expiring key is visible from this host; enable key expiry for this machine in the admin console (0007 needs one)"
+  fi
+fi
+
 # ---- 2. emulator packages and AVD -------------------------------------------
 MISSING=()
 [ -x "$SDK/platform-tools/adb" ]   || MISSING+=("platform-tools")
@@ -112,6 +149,9 @@ app_lines() {  # app_lines < DUMP: the lines logged by the app's processes; fail
   printf '%s\n' "$l" | awk -v re="^($pids)\$" '$3 ~ re'
 }
 app_log() { log | app_lines; }   # this boot
+crash_filter() {   # public CI logs in net mode: drop kotlinx's JSON excerpts, which can carry netmap text
+  if [ "$NET" = 1 ] && [ "${CI:-}" = true ]; then sed -E 's/(JSON input: ).*/\1<redacted>/'; else cat; fi
+}
 SCAN=0        # 1 while the app runs: every wait then also fails fast on a crash
 no_crash() {  # die on a crash, a native fatal signal, a failed worker or a missing API
   local l a hits
@@ -122,7 +162,7 @@ no_crash() {  # die on a crash, a native fatal signal, a failed worker or a miss
     $5 ~ /^[WEF]$/ && /FATAL EXCEPTION|Fatal signal|failed because it threw|NoSuchMethodError|NoClassDefFoundError|VerifyError/ { print; n = 2; next }
     n-- > 0' || true)"
   hits+="${hits:+$'\n'}$(printf '%s\n' "$l" | grep -E "ANR in $PKG|Process $PKG \(pid [0-9]+\) has died" || true)"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" | head -20 >&2; die "$1: the app crashed or hit a missing API"; }
+  [ -z "$hits" ] || { printf '%s\n' "$hits" | head -20 | crash_filter >&2; die "$1: the app crashed or hit a missing API"; }
 }
 wait_for() {  # wait_for SECONDS DESCRIPTION CMD...: retry CMD once a second
   local t="$1" what="$2" end=$((SECONDS + $1)); shift 2
@@ -164,7 +204,12 @@ tap_text() {   # tap the centre of the first node whose text is one of the argum
         return 0
       fi
     done
-    [ "$SECONDS" -lt "$end" ] || die "none of [$*] on screen after 15s; visible: $(printf '%s\n' "$ui" | grep -oE 'text="[^"]+"' | head -10 | paste -sd ' ' -)"
+    if [ "$SECONDS" -ge "$end" ]; then
+      # In net mode the screen lists tailnet devices and the target may be a peer's IP: keep
+      # both out of (public CI) logs.
+      [ "$NET" != 1 ] || die "the expected text is not on screen after 15s; see $OUT/ui.xml"
+      die "none of [$*] on screen after 15s; visible: $(printf '%s\n' "$ui" | grep -oE 'text="[^"]+"' | head -10 | paste -sd ' ' -)"
+    fi
     sleep 1
   done
 }
@@ -176,8 +221,67 @@ ipn_foreground() {
     f && /isForeground=true/ { ok = 1 }
     END { exit !ok }'
 }
+ifaces() {   # netcfg; adb shell exits 0 even on failure (empty output), so require the lo line
+  local nc
+  nc="$(adb shell netcfg | tr -d '\r')"
+  printf '%s\n' "$nc" | grep -E '^lo ' >/dev/null || return 1
+  printf '%s\n' "$nc"
+}
 default_net() { app_log | grep -oE 'cachedDefaultNetwork=[0-9]+' | tail -1 | grep -oE '[0-9]+' || true; }
 new_default_net() { local n; n="$(default_net)"; [ -n "$n" ] && [ "$n" != "$1" ]; }
+
+# Tier 3 (EMU_NET=1).
+in_state() {   # in_state STATE: the last ipn state switch this boot is to STATE
+  local a; a="$(app_log)" || die "ipn state: no $PKG process in this boot's log"
+  [ "$(printf '%s\n' "$a" | grep -oE 'Switching ipn state [A-Za-z]+ -> [A-Za-z]+' | tail -1 | awk '{print $NF}')" = "$1" ]
+}
+running() {    # Running; die at once, with a fixed message, if control rejected the key
+  local a; a="$(app_log)" || die "login: no $PKG process in this boot's log"
+  # Fixed message: the server's text can include a key ID.
+  printf '%s\n' "$a" | grep -E 'Received error: (invalid key|register request: http 4[0-9]{2})' >/dev/null \
+    && die "control rejected TS_AUTHKEY (expired, revoked or already used?)"
+  in_state Running
+}
+policy_reads() { local a; a="$(app_log)" || die "login: no $PKG process in this boot's log"; printf '%s\n' "$a" | grep -c 'setting opts.AuthKey by syspolicy' || true; }
+more_reads() { local n; n="$(policy_reads)" || exit 1; [ "$n" -gt "$1" ]; }   # policy_reads printed why
+tun_ip() {     # tun0's address if it is UP; fails if netcfg gave no output
+  local nc; nc="$(ifaces)" || return 1
+  printf '%s\n' "$nc" | awk '$1 == "tun0" && $2 == "UP" { split($3, a, "/"); print a[1] }'
+}
+tun_up()     { local ip; ip="$(tun_ip)" || return 1; case "$ip" in 100.*) ;; *) return 1 ;; esac; }
+tun_down()   { local ip; ip="$(tun_ip)" || return 1; [ -z "$ip" ]; }
+is_root()    { adb shell id 2>/dev/null | grep -F 'uid=0(' >/dev/null; }
+dev_ok() {     # dev_ok CMD: CMD succeeded on the device (adb shell exits 0 on API 22; restorecon chats)
+  [ "$(adb shell "($1) >/dev/null 2>&1 && echo ok" 2>/dev/null | tr -d '\r')" = ok ]
+}
+reachable()  { ts ping --icmp -c 1 --timeout 5s "$1" >/dev/null 2>&1; }            # host -> emulator
+emu_reaches() { adb shell ping -c 3 -W 5 "$1" | grep -E ' [1-9][0-9]* received' >/dev/null; }
+ui_match()   { ui_dump | grep -E "text=\"($1)\"" >/dev/null; }    # REGEX against whole node texts
+list_box() {   # stdin: a UI dump. Prints "x top bottom" of the first scrollable node (the list)
+  tr '>' '\n' | grep -F 'scrollable="true"' | head -1 | grep -oE 'bounds="[^"]*"' \
+    | tr -c '0-9' ' ' | awk '{ print int(($1 + $3) / 2), $2, $4 }'
+}
+swipe()      { adb shell input swipe "$1" "$2" "$1" "$3" 1500; }   # X FROM_Y TO_Y: a slow drag, no fling
+scroll_to() {  # scroll_to SECONDS REGEX: from the top of the list, scroll down until a node text matches
+  local end=$((SECONDS + $1)) ui prev='' x t b
+  while [ "$SECONDS" -lt "$end" ]; do             # up to the top: until a drag changes nothing
+    ui="$(ui_dump)" || { sleep 1; continue; }     # a failed dump: retry, never swipe blind
+    [ "$ui" != "$prev" ] || break
+    prev="$ui"
+    read -r x t b < <(printf '%s' "$ui" | list_box) || break   # nothing scrollable: already all shown
+    swipe "$x" $((t + (b - t) / 5)) $((b - (b - t) / 10))
+  done
+  prev=
+  while [ "$SECONDS" -lt "$end" ]; do             # down, 60% of the list's height per drag
+    ui="$(ui_dump)" || { sleep 1; continue; }
+    printf '%s' "$ui" | grep -E "text=\"($2)\"" >/dev/null && return 0
+    [ "$ui" != "$prev" ] || return 1              # unchanged after a drag: the end of the list
+    prev="$ui"
+    read -r x t b < <(printf '%s' "$ui" | list_box) || return 1
+    swipe "$x" $((b - (b - t) / 5)) $((t + (b - t) / 5))
+  done
+  return 1
+}
 
 reboot_app() {  # reboot_app LABEL: save this boot's log, reboot, wait until the app starts
   local id t0
@@ -210,6 +314,21 @@ finish() {
     for _ in $(seq 30); do kill -0 "$EMU_PID" 2>/dev/null || break; sleep 1; done
     if kill -0 "$EMU_PID" 2>/dev/null; then kill -9 "$EMU_PID" 2>/dev/null || true; fi   # still up after 30 s
     wait "$EMU_PID" 2>/dev/null || true
+  fi
+  if [ "$NET" = 1 ]; then
+    rm -rf "${KEYDIR:-}"
+    "$TOOLS/avdmanager" delete avd -n "$AVD" >/dev/null 2>&1 \
+      || echo "warning: could not delete AVD $AVD, whose disk holds TS_AUTHKEY; run: avdmanager delete avd -n $AVD" >&2
+    # syspolicy logs restriction values at [v2]; logtail keeps that out of logcat, but a policy
+    # read before the backend's log setup would land there. Scrub every saved file.
+    TS_AUTHKEY="$TS_AUTHKEY" python3 -I - "$OUT" <<'PY' || rc=1
+import os, pathlib, sys
+k = os.environ["TS_AUTHKEY"].encode()
+for p in pathlib.Path(sys.argv[1]).rglob("*"):
+    if p.is_file() and k in (b := p.read_bytes()):
+        p.write_bytes(b.replace(k, b"<TS_AUTHKEY redacted>"))
+        print(f"warning: redacted TS_AUTHKEY from {p}", file=sys.stderr)
+PY
   fi
   exit "$rc"
 }
@@ -274,11 +393,100 @@ adb shell input keyevent KEYCODE_HOME             # leave the login page it open
 # disconnected (WantRunning=false), with no crash and no tunnel.
 reboot_app 0008
 wait_log "0008 BootReceiver's decision" "BootReceiver: boot: WantRunning=false; staying disconnected" 60
-nc="$(adb shell netcfg)"   # adb shell exits 0 even on failure: require the lo line first
-printf '%s\n' "$nc" | grep -E '^lo ' >/dev/null || die "0008: netcfg listed no interfaces"
+nc="$(ifaces)" || die "0008: netcfg listed no interfaces"
 printf '%s\n' "$nc" | grep -E '^tun0 ' >/dev/null && die "0008: tun0 is up while logged out"
 no_crash 0008
 pass "0008 reboot while logged out: BootReceiver stays disconnected, no crash, no tunnel"
 log > "$OUT/logcat-boot$BOOT.txt"
 
-bold "Emulator smoke tests passed in ${SECONDS}s"
+# ---- 5. tier 3: a real tailnet (EMU_NET=1) -----------------------------------
+if [ "$NET" = 1 ]; then
+  info "Tier 3: logging in (host $HOST_IP)"
+  # The AuthKey app restriction, as an MDM would set it. API 22 keeps restrictions in this file
+  # and re-reads it on every query; only root can write it.
+  RES="/data/system/users/0/res_$PKG.xml"
+  SCAN=0                                          # adbd restarts as root
+  adb root >/dev/null 2>&1 || true
+  wait_for 30 "adb as root" is_root
+  SCAN=1
+  KEYDIR="$(mktemp -d)"
+  ( umask 077
+    printf '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<restrictions>\n<entry key="AuthKey" type="s">%s</entry>\n</restrictions>\n' \
+      "$TS_AUTHKEY" > "$KEYDIR/res.xml" )
+  adb push "$KEYDIR/res.xml" /data/local/tmp/res.xml >/dev/null 2>&1 || die "adb push of the AuthKey restriction failed"
+  rm -rf "$KEYDIR"
+  dev_ok "mv /data/local/tmp/res.xml $RES && chown system:system $RES && chmod 600 $RES && restorecon $RES" \
+    || die "could not install the AuthKey restriction"
+  # A fresh process loads restrictions before the Go backend starts (App.initializeApp).
+  adb shell am force-stop "$PKG"
+  adb shell am start -n "$PKG/.MainActivity" >/dev/null   # no -W: it never returns if launch crashes
+  wait_for 30 "the Log in button" ui_has "Log in"
+  n="$(policy_reads)" || exit 1
+  tap_text "Log in"
+  wait_for 30 "login to take the key from the AuthKey restriction" more_reads "$n"
+  wait_for 90 "state Running" running
+  wait_for 30 "tun0 with a tailnet address" tun_up
+  EMU_IP="$(tun_ip)"
+  dev_ok "rm $RES && [ ! -e $RES ]" || die "could not remove the AuthKey restriction"
+  pass "login with an auth key: Running, tun0 $EMU_IP"
+
+  # 0004: below API 23 the app's own sockets stay out of its tunnel through VpnService.protect().
+  al="$(app_log)" || die "0004: no $PKG process in this boot's log"
+  printf '%s\n' "$al" | grep -E 'VpnService\.protect\(fd=[0-9]+\) -> true' >/dev/null || die "0004: no protected socket"
+  printf '%s\n' "$al" | grep -E 'VpnService\.protect\(fd=[0-9]+\) -> false' >/dev/null && die "0004: protect() failed"
+  wait_for 60 "host -> emulator over the tailnet" reachable "$EMU_IP"
+  emu_reaches "$HOST_IP" || die "emulator cannot reach the host $HOST_IP over the tailnet"
+  no_crash 0004
+  pass "0004 sockets protected; tunnel traffic both ways"
+
+  # 0005: the netmap (well over 16 KB with a real DERP map) decodes; the peer list is built
+  # from it, with this device first.
+  wait_for 30 "0005 this device in the peer list" ui_match "${EMU_IP//./\\.}"
+  pass "0005 netmap decoded: peer list shown"
+
+  # 0007: peer details format a key expiry with java.time (TimeUtil).
+  if [ -n "${T0007:-}" ]; then
+    wait_for 90 "the 0007 target in the emulator's peer list (can tag:fireos-ci see the expiring node this host sees?)" \
+      scroll_to 40 "${T0007//./\\.}"
+    tap_text "$T0007"
+    exp='in [0-9.]+ (minutes|hours|days|months|years)|under a minute|[0-9.]+ (minutes|hours|days|months|years) ago'
+    wait_for 40 "0007 a formatted key expiry in its details" scroll_to 15 "$exp"
+    pass "0007 java.time at runtime: key expiry of $T0007_WHO formatted"
+    adb shell input keyevent KEYCODE_BACK
+  else
+    skip "0007 runtime: no node with an expiring key is visible (the runner's tagged key never expires); covered by the local run"
+  fi
+
+  # 0010: a network change while connected; the tunnel must follow the new network.
+  old="$(default_net)"
+  [ -n "$old" ] || die "0010: no default network logged"
+  adb shell svc data disable
+  wait_log "network $old lost" "onLost: network $old"
+  adb shell svc data enable
+  wait_for 60 "a new default network" new_default_net "$old"
+  wait_for 60 "host -> emulator after the network change" reachable "$EMU_IP"
+  tun_up || die "0010: tun0 is gone after the network change"
+  pass "0010 network change while connected: $old -> $(default_net), tunnel kept"
+
+  # 0008: reboot while connected. BootReceiver restarts the VPN without the app being opened.
+  reboot_app "0008 connected"
+  wait_log "0008 BootReceiver reconnecting" "BootReceiver: boot: WantRunning=true" 60
+  wait_for 90 "state Running after boot" in_state Running
+  wait_for 30 "tun0 after boot" tun_up
+  [ "$(tun_ip)" = "$EMU_IP" ] || die "0008: tailnet address changed across the reboot"
+  wait_for 60 "host -> emulator after boot" reachable "$EMU_IP"
+  pass "0008 reboot while connected: tunnel back without opening the app"
+
+  # 0008: disconnect, then reboot. The manual disconnect must survive the reboot.
+  adb shell am broadcast -a "$PKG.DISCONNECT_VPN" -n "$PKG/.IPNReceiver" >/dev/null
+  wait_for 30 "state Stopped" in_state Stopped
+  wait_for 30 "tun0 down" tun_down
+  reboot_app "0008 disconnected"
+  wait_log "0008 BootReceiver staying down" "BootReceiver: boot: WantRunning=false" 60
+  for _ in {1..15}; do tun_down || die "0008: tun0 came up after a manual disconnect (or netcfg failed)"; sleep 1; done
+  no_crash 0008
+  pass "0008 disconnect then reboot: stays down"
+  log > "$OUT/logcat-boot$BOOT.txt"
+fi
+
+bold "Emulator $([ "$NET" = 1 ] && echo 'smoke and tailnet' || echo smoke) tests passed in ${SECONDS}s"
