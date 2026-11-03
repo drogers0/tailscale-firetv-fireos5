@@ -29,10 +29,10 @@ index 9633e2b..d6728f2 100644
              android:exported="true">
 diff --git a/android/src/main/java/com/tailscale/ipn/BootReceiver.kt b/android/src/main/java/com/tailscale/ipn/BootReceiver.kt
 new file mode 100644
-index 0000000..036ee76
+index 0000000..b900ab8
 --- /dev/null
 +++ b/android/src/main/java/com/tailscale/ipn/BootReceiver.kt
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,56 @@
 +// Copyright (c) Tailscale Inc & AUTHORS
 +// SPDX-License-Identifier: BSD-3-Clause
 +package com.tailscale.ipn
@@ -42,6 +42,7 @@ index 0000000..036ee76
 +import android.content.Intent
 +import android.net.VpnService
 +import android.os.Build
++import android.util.Log
 +import com.tailscale.ipn.ui.localapi.Client
 +
 +// Reconnects the VPN after a reboot on API < 24.
@@ -54,21 +55,37 @@ index 0000000..036ee76
 +// still granted; a manual disconnect stays disconnected. startVPN() is the same
 +// path the UI's connect button takes. On API 24+ this is a no-op and always-on
 +// VPN stays in charge.
++//
++// Each decision is logged with android.util.Log, not TSLog: the no-consent case
++// returns before App.get() starts the Go backend that TSLog forwards to.
 +class BootReceiver : BroadcastReceiver() {
 +  override fun onReceive(context: Context, intent: Intent) {
 +    if (intent.action != Intent.ACTION_BOOT_COMPLETED ||
-+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.N ||
-+        VpnService.prepare(context) != null) {
++        Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
++      return
++    }
++    if (VpnService.prepare(context) != null) {
++      Log.d(TAG, "boot: no VPN consent; not reconnecting")
 +      return
 +    }
 +    val app = App.get()
 +    val pending = goAsync()
 +    Client(app.applicationScope).prefs { result ->
 +      try {
-+        if (result.getOrNull()?.WantRunning == true) app.startVPN()
++        val prefs = result.getOrElse {
++          Log.w(TAG, "boot: WantRunning=unknown (prefs read failed); staying disconnected", it)
++          return@prefs
++        }
++        Log.d(TAG, "boot: WantRunning=${prefs.WantRunning}; " +
++            if (prefs.WantRunning) "starting VPN" else "staying disconnected")
++        if (prefs.WantRunning) app.startVPN()
 +      } finally {
 +        pending.finish()
 +      }
 +    }
++  }
++
++  private companion object {
++    const val TAG = "BootReceiver"
 +  }
 +}

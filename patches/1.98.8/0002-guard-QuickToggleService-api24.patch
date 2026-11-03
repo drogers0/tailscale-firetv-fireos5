@@ -29,3 +29,19 @@ index 11e8b4d..5a8bb56 100644
      TSLog.d("App", "Set Tile Ready: $ableToStartVPN")
    }
  
+diff --git a/android/src/main/java/com/tailscale/ipn/QuickToggleService.java b/android/src/main/java/com/tailscale/ipn/QuickToggleService.java
+index a8053a4..b31166f 100644
+--- a/android/src/main/java/com/tailscale/ipn/QuickToggleService.java
++++ b/android/src/main/java/com/tailscale/ipn/QuickToggleService.java
+@@ -9,6 +9,11 @@ import android.os.Build;
+ import android.service.quicksettings.Tile;
+ import android.service.quicksettings.TileService;
+ 
++import androidx.annotation.RequiresApi;
++
++// TileService is API 24+; the system never binds it below that, and App.kt guards
++// its callers. The annotation makes lint enforce those guards.
++@RequiresApi(Build.VERSION_CODES.N)
+ public class QuickToggleService extends TileService {
+     // lock protects the static fields below it.
+     private static final Object lock = new Object();

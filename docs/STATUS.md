@@ -50,6 +50,9 @@ unavailable here (`settings get secure always_on_vpn_app` returns `null` on Fire
 
 **0008** adds that receiver below API 24. It reconnects only if the VPN was left on and
 consent is still granted, and needs one app launch after install or a force-stop.
+On the API 22 emulator, tier 3 checks both cases, a reboot while connected and a disconnect
+followed by a reboot ([TESTING.md](TESTING.md)); the Fire TV itself is still unverified, and the
+check is on the release checklist.
 
 > [!TIP]
 > **Workaround:** open the Tailscale app once after a reboot. Everything else persists —
@@ -70,7 +73,7 @@ if any does not.
 | # | Fixes | API |
 |---|---|---|
 | 0001 | `NotificationChannel`, unguarded in `App.onCreate()` | 26 |
-| 0002 | `QuickToggleService : TileService`, 2 call sites | 24 |
+| 0002 | `QuickToggleService : TileService`, 2 call sites; `@RequiresApi` so lint enforces the guards | 24 |
 | 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 |
 | 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 |
 | 0005 | netmap decode: `decodeFromString`, not `decodeFromStream` | ≤23 |
@@ -79,6 +82,7 @@ if any does not.
 | 0008 | `BOOT_COMPLETED` receiver, standing in for always-on VPN | 24 |
 | 0009 | `getActiveNetwork` in the VPN-conflict check → `getAllNetworks` below 23 | 23 |
 | 0010 | read the initial network state in `NetworkChangeCallback.onAvailable` | 26 |
+| 0011 | `Notification.Builder(Context, String)` in `StartVPNWorker` → `NotificationCompat` | 26 |
 
 Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
 these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
@@ -155,6 +159,9 @@ the same commit produce APKs that cannot upgrade over one another.
 ./scripts/build.sh
 ./scripts/sign-apk.sh          # signs the newest APK in dist/, refreshes the .sha256
 ```
+
+A later build of the same version refuses to overwrite the signed APK; move it to a release
+folder first, or build with `DIST=<dir>` (see BUILD.md, "Signing").
 
 Signer: `CN=tailscale-firetv-fireos5`, SHA-256 `b6e56d68…53b5`.
 

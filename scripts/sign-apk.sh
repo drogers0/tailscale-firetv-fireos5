@@ -94,6 +94,7 @@ fi
 
 APK="${1:-}"
 if [ -z "$APK" ]; then
+  # shellcheck disable=SC2010  # dist/ names come from build.sh; no odd characters
   APK="$(ls -t "$REPO_ROOT"/dist/*.apk 2>/dev/null | grep -v -- '-unsigned' | head -1 || true)"
 fi
 [ -n "$APK" ] && [ -f "$APK" ] || die "no APK found; pass one explicitly"

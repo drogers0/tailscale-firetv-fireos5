@@ -1,0 +1,58 @@
+name: Set up build toolchain
+description: JDK 17 plus Gradle, Android SDK and Go caches for scripts/build.sh
+inputs:
+  cache-key:
+    description: Separates Go build caches for jobs that build different targets or refs (e.g. tier1, drift, emulator)
+    required: true
+  save-sdk:
+    description: Save the shared Android SDK cache entry on a miss. Only the plain build passes 'true'; jobs that add SDK packages must not
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      with:
+        distribution: temurin
+        java-version: '17'
+    # Caches ~/.gradle; writes only from main.
+    - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+    - id: keys
+      shell: bash
+      run: |
+        # SDK owned by build.sh: the image has no NDK 23.1. Keys hash only the pin lines.
+        echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
+        # Upstream tool/go runs `set -x` when CI=true; this is its own opt-out.
+        echo "NOBASHDEBUG=true" >> "$GITHUB_ENV"
+        # A pin line that stops matching would freeze its key, so check the lines exist.
+        sdk_re='^(NDK_VERSION|CMDLINE_TOOLS|SDK_PLATFORM|BUILD_TOOLS)='
+        [ "$(grep -cE "$sdk_re" scripts/build.sh)" = 4 ] \
+          || { echo "::error::expected 4 SDK pin lines in scripts/build.sh"; exit 1; }
+        grep -qE '^TS_REF=' scripts/build.sh \
+          || { echo "::error::no TS_REF= pin line in scripts/build.sh"; exit 1; }
+        h() { sha256sum | cut -c1-16; }
+        sdk="$(grep -E "$sdk_re" scripts/build.sh | h)"
+        go="$( { grep -E '^TS_REF=' scripts/build.sh; echo "${TS_REF:-}"; } | h)"
+        { echo "sdk=$sdk"; echo "go=$go"; } >> "$GITHUB_OUTPUT"
+    # Only one job may write the shared SDK entry. Otherwise a job that installs emulator
+    # packages into the same root and misses this key would save them into it, and every
+    # build would restore them. No restore-keys: a prefix restore after a pin bump would
+    # bring back the old NDK and the new entry would save both (~1 GB more per bump).
+    - if: inputs.save-sdk == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/android-sdk
+        key: android-sdk-${{ runner.os }}-${{ steps.keys.outputs.sdk }}
+    - if: inputs.save-sdk != 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/android-sdk
+        key: android-sdk-${{ runner.os }}-${{ steps.keys.outputs.sdk }}
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cache/tailscale-go
+          ~/.cache/tailscale-go.extracted
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: go-${{ runner.os }}-${{ inputs.cache-key }}-${{ steps.keys.outputs.go }}
+        restore-keys: go-${{ runner.os }}-${{ inputs.cache-key }}-

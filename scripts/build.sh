@@ -11,6 +11,9 @@
 #
 # Overriding only the first produces an APK that installs and then dies in native code.
 #
+# Usage: ./scripts/build.sh [--patch-only]
+#   --patch-only  fetch TS_REF, apply its patch series, then stop. Needs only git (tier 0).
+#
 # See docs/BUILD.md for prerequisites and TS_REF choices.
 
 set -euo pipefail
@@ -19,27 +22,43 @@ set -euo pipefail
 TS_REPO="https://github.com/tailscale/tailscale-android.git"
 # Match the documented release and the available API-22 patch series.
 TS_REF="${TS_REF:-1.98.8-t1241b225b-gbcbaf1889}"
+# SDK packages, the NDK included; CI keys its SDK cache on these four NAME= lines
+# (.github/actions/setup-build).
 NDK_VERSION="${NDK_VERSION:-23.1.7779620}"
+CMDLINE_TOOLS=9477386
+SDK_PLATFORM=android-34
+BUILD_TOOLS=34.0.0
 
 # ---- tunables ---------------------------------------------------------------
 MIN_SDK="${MIN_SDK:-22}"           # device API level
 TS_ARCH="${TS_ARCH:-arm}"          # legacy gogio recipe only; empty = every ABI
 GOMOBILE_TARGET="${GOMOBILE_TARGET:-android/arm}"   # modern recipe; arm = armeabi-v7a
 WORKDIR="${WORKDIR:-.build}"
+DIST="${DIST:-dist}"               # APK output dir; relative paths are from the repo root
 SKIP_TESTS="${SKIP_TESTS:-1}"
 GRADLE_HEAP="${GRADLE_HEAP:-6g}"
+PATCH_SERIES="${PATCH_SERIES:-}"   # dir under patches/; default: patches/$TS_REF, then patches/<version>
+LINT="${LINT:-0}"                  # 1 = also run Android Lint, NewApi only (scripts/lint-newapi.gradle)
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$REPO_ROOT/$WORKDIR/tailscale-android-${TS_REF##*-}"
-DIST="$REPO_ROOT/dist"
+case "$DIST" in /*) ;; *) DIST="$REPO_ROOT/$DIST" ;; esac
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+java_major() { "$1/bin/java" -version 2>&1 | sed -nE 's/.* version "([0-9]+).*/\1/p' | head -1; }
+
+PATCH_ONLY=0
+case "${1:-}" in
+  "") ;;
+  --patch-only) PATCH_ONLY=1 ;;
+  *) die "usage: $0 [--patch-only]" ;;
+esac
 
 # gomobile/gogio arch name -> Android ABI directory name. Used for the artifact
-# filename and for the ABI assertion in step 8, so both follow what was built.
+# filename and for the ABI assertion in the verify step, so both follow what was built.
 abi_for() {
   case "$1" in
     arm)   echo armeabi-v7a ;;
@@ -50,69 +69,27 @@ abi_for() {
   esac
 }
 
-# ---- 1. preflight -----------------------------------------------------------
-info "Preflight  (ref=$TS_REF  minSdk=$MIN_SDK)"
-
-for c in git curl go; do command -v $c >/dev/null || die "$c not found"; done
-
-if [ -z "${JAVA_HOME:-}" ]; then
-  if [ "$(uname)" = "Darwin" ] && /usr/libexec/java_home -v 17 >/dev/null 2>&1; then
-    JAVA_HOME="$(/usr/libexec/java_home -v 17)"
-  elif [ -d "$HOME/.local/jdks" ]; then
-    JAVA_HOME="$(ls -d "$HOME"/.local/jdks/jdk-17*/Contents/Home "$HOME"/.local/jdks/jdk-17* 2>/dev/null | head -1)"
-  elif [ -d /usr/lib/jvm/java-17-openjdk-amd64 ]; then
-    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-  fi
-fi
-[ -n "${JAVA_HOME:-}" ] || die "JDK 17 not found. Set JAVA_HOME. See docs/BUILD.md."
-export JAVA_HOME
-JAVA_MAJOR="$("$JAVA_HOME/bin/java" -version 2>&1 | head -1 | sed -E 's/.*"([0-9]+).*/\1/')"
-[ "$JAVA_MAJOR" = "17" ] || die "JAVA_HOME is JDK $JAVA_MAJOR; AGP needs JDK 17. See docs/BUILD.md."
-info "JDK 17: $JAVA_HOME"
-
-if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
-  if [ "$(uname)" = "Darwin" ]; then ANDROID_SDK_ROOT="$HOME/Library/Android/sdk"
-  else ANDROID_SDK_ROOT="$HOME/Android/Sdk"; fi
-fi
-export ANDROID_SDK_ROOT ANDROID_HOME="$ANDROID_SDK_ROOT"
-mkdir -p "$ANDROID_SDK_ROOT"
-info "Android SDK: $ANDROID_SDK_ROOT"
-
-# ---- 2. SDK packages --------------------------------------------------------
-SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-if [ ! -x "$SDKMANAGER" ]; then
-  info "Installing Android command-line tools"
-  case "$(uname)" in
-    Darwin) TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-mac-9477386_latest.zip" ;;
-    Linux)  TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" ;;
-    *) die "unsupported platform $(uname)" ;;
-  esac
-  tmp="$ANDROID_SDK_ROOT/.tmp.$$"; mkdir -p "$tmp"
-  curl -fsSL -o "$tmp/tools.zip" "$TOOLS_URL"
-  unzip -q "$tmp/tools.zip" -d "$tmp"
-  mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-  rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-  mv "$tmp/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-  rm -rf "$tmp"
-fi
-
-MISSING=()
-[ -d "$ANDROID_SDK_ROOT/ndk/$NDK_VERSION" ]  || MISSING+=("ndk;$NDK_VERSION")
-[ -d "$ANDROID_SDK_ROOT/platforms/android-34" ] || MISSING+=("platforms;android-34")
-[ -d "$ANDROID_SDK_ROOT/build-tools/34.0.0" ]   || MISSING+=("build-tools;34.0.0")
-if [ ${#MISSING[@]} -gt 0 ]; then
-  info "Installing SDK packages: ${MISSING[*]}"
-  yes 2>/dev/null | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-  "$SDKMANAGER" "${MISSING[@]}"
+# ---- 1. patch series --------------------------------------------------------
+# Resolved before any fetch, so a bad or missing series fails at once.
+info "Build  (ref=$TS_REF  minSdk=$MIN_SDK)"
+if [ -n "$PATCH_SERIES" ]; then
+  PATCHDIR="$REPO_ROOT/patches/$PATCH_SERIES"
+  [ -d "$PATCHDIR" ] || die "no patch series patches/$PATCH_SERIES"
 else
-  info "SDK packages present"
+  PATCHDIR="$REPO_ROOT/patches/$TS_REF"
+  [ -d "$PATCHDIR" ] || PATCHDIR="$REPO_ROOT/patches/${TS_REF%%-*}"
 fi
-export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
+if [ "$PATCH_ONLY" = 1 ] && [ ! -d "$PATCHDIR" ]; then
+  die "no patch series for $TS_REF; nothing to check"
+fi
 
-# ---- 3. checkout ------------------------------------------------------------
-if [ ! -d "$SRC/.git" ]; then
+# ---- 2. checkout ------------------------------------------------------------
+command -v git >/dev/null || die "git not found"
+# Reuse only a checkout that has a commit: a fetch that failed after `git init` would
+# otherwise be reused, and every patch would then fail as if upstream had drifted.
+if ! { [ -d "$SRC/.git" ] && git -C "$SRC" rev-parse -q --verify HEAD >/dev/null 2>&1; }; then
   info "Fetching $TS_REF (shallow)"
-  mkdir -p "$SRC"
+  rm -rf "$SRC"; mkdir -p "$SRC"
   git -C "$SRC" init -q
   git -C "$SRC" remote add origin "$TS_REPO" 2>/dev/null || true
   git -C "$SRC" fetch -q --depth 1 origin "$TS_REF"
@@ -127,31 +104,93 @@ info "HEAD: $(git -C "$SRC" rev-parse HEAD)"
 git -C "$SRC" checkout -q -- . 2>/dev/null || true
 git -C "$SRC" clean -fdq -e .gobin
 
-# ---- 3b. per-ref patches ----------------------------------------------------
+# ---- 3. per-ref patches -----------------------------------------------------
 # Upstream runs at minSdk 26, so API-guard rot accumulates: calls to APIs newer
 # than 22 that upstream can never hit. Each patch here fixes one, and is scoped
 # to a single ref so it is obvious what diverges from upstream and why.
-PATCHDIR="$REPO_ROOT/patches/$TS_REF"
-[ -d "$PATCHDIR" ] || PATCHDIR="$REPO_ROOT/patches/${TS_REF%%-*}"
 if [ -d "$PATCHDIR" ]; then
+  n=0
   for p in "$PATCHDIR"/*.patch; do
     [ -e "$p" ] || continue
     if git -C "$SRC" apply --check "$p" 2>/dev/null; then
       git -C "$SRC" apply "$p"
       info "Applied patch: $(basename "$p")"
+      n=$((n+1))
     else
+      git -C "$SRC" apply --check -v "$p" >&2 || true   # show which file and hunk failed
       die "patch does not apply to $TS_REF: $(basename "$p")"
     fi
   done
+  if [ "$PATCH_ONLY" = 1 ]; then
+    [ "$n" -gt 0 ] || die "patches/$(basename "$PATCHDIR") has no *.patch; nothing to check"
+    bold "Patch check passed for $TS_REF ($n patches)"
+    exit 0
+  fi
 else
   info "No patches for $TS_REF"
 fi
 
-# ---- 4. Go toolchain --------------------------------------------------------
+# ---- 4. preflight -----------------------------------------------------------
+for c in curl unzip; do command -v $c >/dev/null || die "$c not found"; done
+
+if [ -z "${JAVA_HOME:-}" ]; then
+  for c in "$( [ "$(uname)" = Darwin ] && /usr/libexec/java_home -F -v 17 2>/dev/null )" \
+           "$HOME"/.local/jdks/jdk-17*/Contents/Home "$HOME"/.local/jdks/jdk-17* \
+           /usr/lib/jvm/java-17-openjdk-*; do
+    if [ -n "$c" ] && [ -x "$c/bin/java" ] && [ "$(java_major "$c")" = 17 ]; then JAVA_HOME="$c"; break; fi
+  done
+fi
+[ -n "${JAVA_HOME:-}" ] || die "JDK 17 not found. Set JAVA_HOME. See docs/BUILD.md."
+export JAVA_HOME
+JAVA_MAJOR="$(java_major "$JAVA_HOME")"
+[ "$JAVA_MAJOR" = "17" ] || die "JAVA_HOME is JDK $JAVA_MAJOR; AGP needs JDK 17. See docs/BUILD.md."
+info "JDK 17: $JAVA_HOME"
+
+if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
+  if [ "$(uname)" = "Darwin" ]; then ANDROID_SDK_ROOT="$HOME/Library/Android/sdk"
+  else ANDROID_SDK_ROOT="$HOME/Android/Sdk"; fi
+fi
+export ANDROID_SDK_ROOT ANDROID_HOME="$ANDROID_SDK_ROOT"
+mkdir -p "$ANDROID_SDK_ROOT"
+info "Android SDK: $ANDROID_SDK_ROOT"
+
+# ---- 5. SDK packages --------------------------------------------------------
+SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+if [ ! -x "$SDKMANAGER" ]; then
+  info "Installing Android command-line tools"
+  case "$(uname)" in
+    Darwin) TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-mac-${CMDLINE_TOOLS}_latest.zip" ;;
+    Linux)  TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS}_latest.zip" ;;
+    *) die "unsupported platform $(uname)" ;;
+  esac
+  tmp="$ANDROID_SDK_ROOT/.tmp.$$"; mkdir -p "$tmp"
+  curl -fsSL -o "$tmp/tools.zip" "$TOOLS_URL"
+  unzip -q "$tmp/tools.zip" -d "$tmp"
+  mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+  rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+  mv "$tmp/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+  rm -rf "$tmp"
+fi
+
+MISSING=()
+[ -d "$ANDROID_SDK_ROOT/ndk/$NDK_VERSION" ]       || MISSING+=("ndk;$NDK_VERSION")
+[ -d "$ANDROID_SDK_ROOT/platforms/$SDK_PLATFORM" ] || MISSING+=("platforms;$SDK_PLATFORM")
+[ -d "$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS" ] || MISSING+=("build-tools;$BUILD_TOOLS")
+if [ ${#MISSING[@]} -gt 0 ]; then
+  info "Installing SDK packages: ${MISSING[*]}"
+  yes 2>/dev/null | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+  "$SDKMANAGER" "${MISSING[@]}"
+else
+  info "SDK packages present"
+fi
+export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
+
+# ---- 6. Go toolchain --------------------------------------------------------
 if [ -x "$SRC/tool/go" ]; then
   GO="$SRC/tool/go"                      # upstream wrapper; fetches its own pinned Go
   info "Using upstream tool/go"
 else
+  command -v go >/dev/null || die "go not found ($TS_REF has no tool/go)"
   GO="go"
   info "Using system go: $(go version)"
 fi
@@ -164,11 +203,13 @@ GOROOT_PINNED="$( cd "$SRC" && "$GO" env GOROOT 2>/dev/null || true )"
 if [ -n "$GOROOT_PINNED" ] && [ -x "$GOROOT_PINNED/bin/go" ]; then
   export PATH="$GOROOT_PINNED/bin:$PATH"
   info "Pinned Go on PATH: $("$GOROOT_PINNED/bin/go" version)"
+elif [ "$GO" != go ]; then
+  die "tool/go did not yield a toolchain (rerun: cd $SRC && tool/go version)"
 else
   warn "could not resolve a pinned GOROOT; gomobile will use whatever go is on PATH"
 fi
 
-# ---- 5. apply the API-floor overrides ---------------------------------------
+# ---- 7. apply the API-floor overrides ---------------------------------------
 BG="$SRC/android/build.gradle"
 CUR_MIN="$(grep -oE 'minSdkVersion +[0-9]+' "$BG" | head -1 | grep -oE '[0-9]+')"
 if [ "$CUR_MIN" != "$MIN_SDK" ]; then
@@ -184,7 +225,7 @@ githubPassword=
 github2FASecret=
 EOF
 
-# ---- 5b. tailscale.version --------------------------------------------------
+# ---- 8. tailscale.version ---------------------------------------------------
 # Must precede the native build: version-ldflags.sh does `source tailscale.version`,
 # and 1.78.0+ build.gradle reads it via getVersionProperty().
 #
@@ -198,7 +239,7 @@ if [ ! -f "$SRC/tailscale.version" ]; then
 fi
 [ -s "$SRC/tailscale.version" ] || die "tailscale.version is missing or empty"
 
-# ---- 6. native library ------------------------------------------------------
+# ---- 9. native library ------------------------------------------------------
 mkdir -p "$SRC/android/libs"
 
 # A multi-ABI build is named "universal" but must still carry armeabi-v7a; a
@@ -253,7 +294,7 @@ else
   [ -f "$SRC/android/libs/ipn.aar" ] || die "ipn.aar was not produced"
 fi
 
-# ---- 7. gradle --------------------------------------------------------------
+# ---- 10. gradle -------------------------------------------------------------
 GP="$SRC/android/gradle.properties"
 grep -q "^org.gradle.parallel" "$GP" 2>/dev/null || printf 'org.gradle.parallel=true\norg.gradle.caching=true\nkotlin.incremental=true\n' >> "$GP"
 if grep -q "^org.gradle.jvmargs" "$GP" 2>/dev/null; then
@@ -264,27 +305,38 @@ fi
 
 # Flavors were removed once Tailscale dropped Play Services; pick whichever exists.
 if grep -qi "fdroid" "$BG"; then
-  ASSEMBLE=assembleFdroidDebug
+  VARIANT=FdroidDebug
   APK_GLOB="$SRC/android/build/outputs/apk/fdroid/debug/*.apk"
 else
-  ASSEMBLE=assembleDebug
+  VARIANT=Debug
   APK_GLOB="$SRC/android/build/outputs/apk/debug/*.apk"
 fi
-TASKS=("$ASSEMBLE"); [ "$SKIP_TESTS" = "1" ] || TASKS=(test "$ASSEMBLE")
+GRADLE_ARGS=(--no-daemon --continue "assemble$VARIANT")
+[ "$SKIP_TESTS" = "1" ] || GRADLE_ARGS+=("test${VARIANT}UnitTest")
+if [ "$LINT" = "1" ]; then
+  # NewApi only: calls to APIs above MIN_SDK are the bug class this repo patches.
+  GRADLE_ARGS+=(-I "$REPO_ROOT/scripts/lint-newapi.gradle" "lint$VARIANT")
+  if [ -f "$PATCHDIR/lint.xml" ]; then export TS_LINT_CONFIG="$PATCHDIR/lint.xml"; fi
+fi
 
-info "Gradle: ${TASKS[*]}"
-( cd "$SRC/android" && ./gradlew --no-daemon "${TASKS[@]}" )
+info "Gradle: ${GRADLE_ARGS[*]}"
+( cd "$SRC/android" && ./gradlew "${GRADLE_ARGS[@]}" )
 
 APK="$(ls -1 $APK_GLOB 2>/dev/null | head -1)"
 [ -n "$APK" ] && [ -f "$APK" ] || die "no APK produced under $APK_GLOB"
 
-# ---- 8. verify + publish ----------------------------------------------------
+# ---- 11. verify + publish ---------------------------------------------------
 mkdir -p "$DIST"
-VER="$(cd "$SRC" && git describe --tags --always 2>/dev/null || echo "$TS_REF")"
 OUT="$DIST/tailscale-fireos5-${TS_REF%%-*}-minsdk${MIN_SDK}-${ABI_LABEL}.apk"
+# Never replace a release-signed APK (sign-apk.sh re-signs in place) with a debug build.
+# apksigner runs `java` from PATH, and JAVA_HOME (found above) need not be on it.
+if [ -f "$OUT" ] && ! PATH="$JAVA_HOME/bin:$PATH" "$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/apksigner" \
+     verify --print-certs "$OUT" | grep -F 'CN=Android Debug' >/dev/null; then
+  die "$OUT is not a debug build (release-signed, or apksigner could not read it); move it away first, or build into another directory with DIST=<dir>"
+fi
 cp "$APK" "$OUT"
 
-info "Verifying (minSdk <= $MIN_SDK, $TARGET_ABI present)"
+info "Verifying (minSdk <= $MIN_SDK, $TARGET_ABI Go library present)"
 if ! python3 "$REPO_ROOT/scripts/verify-apk.py" --require-min-sdk "$MIN_SDK" --require-abi "$TARGET_ABI" "$OUT"; then
   rm -f "$OUT"
   die "verification failed — artifact rejected"

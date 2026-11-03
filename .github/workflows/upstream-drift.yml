@@ -1,0 +1,69 @@
+name: Upstream drift
+on:
+  schedule:
+    - cron: '17 6 * * 1'      # Mondays 06:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      ts_ref: ${{ steps.r.outputs.ts_ref }}
+      patch_series: ${{ steps.r.outputs.patch_series }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - id: r
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          # Assign first: a failing $(...) inside echo would not trip -e, and an empty ref
+          # would silently test the pinned ref and close a real drift issue.
+          ref="$(gh release view --repo tailscale/tailscale-android --json tagName --jq .tagName)"
+          series="$(cd patches && printf '%s\n' [0-9]*/ | tr -d / | grep -E '^[0-9]+(\.[0-9]+)+$' | sort -V | tail -1)"
+          [ -n "$ref" ] || { echo "::error::no upstream release tag resolved"; exit 1; }
+          [ -n "$series" ] && [ -d "patches/$series" ] || { echo "::error::no patch series under patches/"; exit 1; }
+          { echo "ts_ref=$ref"; echo "patch_series=$series"; } >> "$GITHUB_OUTPUT"
+  tiers:
+    needs: resolve
+    uses: ./.github/workflows/ci.yml
+    with:
+      ts_ref: ${{ needs.resolve.outputs.ts_ref }}
+      patch_series: ${{ needs.resolve.outputs.patch_series }}
+  report:
+    needs: [resolve, tiers]
+    if: ${{ !cancelled() }}
+    concurrency: { group: upstream-drift-report }   # overlapping runs must not both create an issue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: { issues: write }
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULT: ${{ needs.tiers.result }}
+          TS_REF: ${{ needs.resolve.outputs.ts_ref }}
+          SERIES: ${{ needs.resolve.outputs.patch_series }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          label=upstream-drift
+          gh label create "$label" --color B60205 --force \
+            --description "Latest upstream release fails tiers 0+1 with the current patch series"
+          num="$(gh issue list --label "$label" --state open --json number --jq '.[0].number // empty')"
+          if [ "$RESULT" = success ]; then
+            [ -z "$num" ] || gh issue close "$num" --comment "Tiers 0+1 pass again against \`$TS_REF\`: $RUN_URL"
+            exit 0
+          fi
+          key="upstream \`${TS_REF:-unresolved}\` with \`patches/${SERIES:-?}\`"
+          body="Tiers 0+1 failed against $key (see the run for the failing stage): $RUN_URL"
+          if [ -z "$num" ]; then
+            gh issue create --title "Upstream drift: latest release fails tiers 0+1" --label "$label" --body "$body"
+            exit 0
+          fi
+          # Same ref and series as the last bot report: stay quiet. Human comments are ignored.
+          last="$(gh issue view "$num" --json body,comments \
+            --jq '([.body] + [.comments[] | select(.author.login == "github-actions") | .body]) | last')"
+          case "$last" in *"$key"*) exit 0 ;; esac
+          gh issue comment "$num" --body "$body"
