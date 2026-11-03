@@ -49,7 +49,7 @@ jobs:
     name: Tier 1 · build, NewApi lint, unit tests
     needs: check
     runs-on: ubuntu-24.04
-    timeout-minutes: 25        # cold runs take about 8 minutes
+    timeout-minutes: 25        # cold runs take about 7 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -84,7 +84,7 @@ jobs:
       (github.event_name == 'pull_request' && github.base_ref == 'main') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
-    timeout-minutes: 25        # cold runs take about 9 minutes
+    timeout-minutes: 25        # cold runs take about 11 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
