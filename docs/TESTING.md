@@ -1,7 +1,8 @@
 # Testing
 
-Most regressions in the patch series can be caught without a Fire TV. The tiers below run the
-same commands locally and in CI; only the release checklist at the end needs hardware.
+Most regressions in the patch series can be caught without a Fire TV. Tiers 0-2 run the
+same commands locally and in CI; tier 3 runs locally only. Only the release checklist at the
+end needs hardware.
 
 ## Tiers
 
@@ -10,11 +11,11 @@ same commands locally and in CI; only the release checklist at the end needs har
 | 0 | a patch that no longer applies, shellcheck warnings, `verify-apk` regressions | every PR, pushes to `main`, weekly upstream drift | `make check` |
 | 1 | build breaks, `NewApi` calls above API 22 (Android Lint), upstream unit tests | every PR, pushes to `main`, weekly upstream drift | `LINT=1 SKIP_TESTS=0 make build` |
 | 2 | API 22 runtime failures of each patch on an emulator, with no tailnet | PRs to `main`, pushes to `main` | `make build-emu emu-test` |
-| 3 | the same emulator logged in to a real tailnet: tunnel, peers, reboots, network changes | by hand | `make build-emu emu-test-net`, or the "Tier 3" workflow |
+| 3 | the same emulator logged in to a real tailnet: tunnel, peers, reboots, network changes | by hand, locally | `make build-emu emu-test-net` |
 
 Tiers 2 and 3 boot an API 22 `google_apis` emulator (x86_64 under KVM in CI, arm64-v8a on Apple
 Silicon) with its own AVD (`tsfire-api22`) on port 5584, so other emulators are never touched.
-One script, `scripts/emu-test.sh`, runs both, locally and in CI. It stops at the first failure
+One script, `scripts/emu-test.sh`, runs both. It stops at the first failure
 and keeps its logs in `.build/emu-test/`.
 
 ## What each emulator check covers
@@ -41,10 +42,9 @@ Every wait also fails fast on a crash, a native fatal signal, a failed worker or
 Known gaps:
 - **0007** at tier 2 is static, because its `java.time` calls need a netmap. Tier 3 runs them by
   opening the details of a node whose key expires; tagged nodes, like the emulator, never expire.
-  In CI it can SKIP (see below).
 - **0009** relies on a fresh install having no VPN consent, rather than revoking it.
 
-## Tier 3 locally
+## Tier 3
 
 - **The host must be on the tailnet** (`tailscale ip -4`). On macOS, set `TAILSCALE` to the
   app's CLI if `tailscale` is not on `PATH`. The checks ping the emulator from the host.
@@ -74,22 +74,6 @@ is deleted at exit.
 **Where the key goes.** The app's managed-settings code logs the key's value into the Tailscale
 client's own logs, which are uploaded to Tailscale, the key's issuer. This is true of any device
 given an auth key through MDM. Use a short-expiry key if that matters to you.
-
-## Tier 3 in CI
-
-1. Create an OAuth client in the admin console (Settings → OAuth clients) with the **Auth Keys**
-   scope set to write and the tag `tag:fireos-ci`, and nothing else.
-2. Add it to the repository as the Actions secrets `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET`.
-3. Run it from Actions → Tier 3 → Run workflow, or `gh workflow run tailnet.yml --ref <branch>`
-   (both need the workflow on `main` first).
-
-The runner joins the tailnet through `tailscale/github-action`, and the workflow mints a
-single-use, ephemeral, one-hour key for the emulator on each run.
-
-- Runtime 0007 needs some device with an expiring key that `tag:fireos-ci` can see. Without
-  one it prints SKIP with a warning annotation; the local run covers it.
-- It uploads no artifacts: the repository is public, and the emulator sees the whole tailnet.
-  Reproduce a failure locally with the same command.
 
 ## Before a release (hardware only)
 

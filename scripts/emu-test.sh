@@ -48,7 +48,6 @@ bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 pass() { printf '\033[32mPASS\033[0m %s\n' "$*"; }
-skip() { printf '\033[33mSKIP\033[0m %s\n' "$*"; [ "${CI:-}" != true ] || echo "::warning::SKIP $*"; }
 
 EMU_ARCH="${EMU_ARCH:-$(uname -m)}"
 case "$EMU_ARCH" in
@@ -98,8 +97,8 @@ if [ "$NET" = 1 ]; then
   HOST_IP="$(ts ip -4 2>/dev/null | head -1)" || true
   [ -n "$HOST_IP" ] || die "this host is not on a tailnet (or set TAILSCALE to its CLI)"
   st="$(ts status --json 2>/dev/null)" || die "'tailscale status --json' failed on this host"
-  # 0007: java.time runs where the app formats a key expiry. Tagged nodes (the emulator, a CI
-  # runner) never expire, so pick this host, or else a peer, whose key does. Mullvad nodes
+  # 0007: java.time runs where the app formats a key expiry. Tagged nodes, like the emulator,
+  # never expire, so pick this host, or else a peer, whose key does. Mullvad nodes
   # (Location) are not listed by the app, and sharee nodes are not visible to a tagged node.
   # The IP is used to find the node on the emulator and is never printed.
   read -r T0007 T0007_WHO < <(printf '%s' "$st" | python3 -I -c '
@@ -110,9 +109,7 @@ for who, n in [("host", s["Self"])] + [("a peer", p) for p in (s.get("Peer") or 
     if n.get("KeyExpiry") and ips and not n.get("Location") and not n.get("ShareeNode"):
         print(ips[0], who)
         break') || true
-  if [ -z "${T0007:-}" ] && [ "${CI:-}" != true ]; then
-    die "no node with an expiring key is visible from this host; enable key expiry for this machine in the admin console (0007 needs one)"
-  fi
+  [ -n "${T0007:-}" ] || die "no node with an expiring key is visible from this host; enable key expiry for this machine in the admin console (0007 needs one)"
 fi
 
 # ---- 2. emulator packages and AVD -------------------------------------------
@@ -148,12 +145,6 @@ app_lines() {  # app_lines < DUMP: the lines logged by the app's processes; fail
   printf '%s\n' "$l" | awk -v re="^($pids)\$" '$3 ~ re'
 }
 app_log() { log | app_lines; }   # this boot
-crash_filter() {   # public CI logs in net mode: drop netmap text (kotlinx JSON excerpts, names, emails, tailnet IPs)
-  if [ "$NET" = 1 ] && [ "${CI:-}" = true ]; then
-    sed -E 's/(JSON input: ).*/\1<redacted>/; s/[A-Za-z0-9.-]+\.ts\.net/<redacted>/g; s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+/<email>/g
-      s/100\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g; s/fd7a:115c:a1e0:[0-9a-fA-F:]*/<ip6>/g'
-  else cat; fi
-}
 SCAN=0        # 1 while the app runs: every wait then also fails fast on a crash
 no_crash() {  # die on a crash, a native fatal signal, a failed worker or a missing API
   local l a hits
@@ -164,7 +155,7 @@ no_crash() {  # die on a crash, a native fatal signal, a failed worker or a miss
     $5 ~ /^[WEF]$/ && /FATAL EXCEPTION|Fatal signal|failed because it threw|NoSuchMethodError|NoClassDefFoundError|VerifyError/ { print; n = 2; next }
     n-- > 0' || true)"
   hits+="${hits:+$'\n'}$(printf '%s\n' "$l" | grep -E "ANR in $PKG|Process $PKG \(pid [0-9]+\) has died" || true)"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" | head -20 | crash_filter >&2; die "$1: the app crashed or hit a missing API"; }
+  [ -z "$hits" ] || { printf '%s\n' "$hits" | head -20 >&2; die "$1: the app crashed or hit a missing API"; }
 }
 wait_for() {  # wait_for SECONDS DESCRIPTION CMD...: retry CMD once a second
   local t="$1" what="$2" end=$((SECONDS + $1)); shift 2
@@ -208,7 +199,7 @@ tap_text() {   # tap the centre of the first node whose text is one of the argum
     done
     if [ "$SECONDS" -ge "$end" ]; then
       # In net mode the screen lists tailnet devices and the target may be a peer's IP: keep
-      # both out of (public CI) logs.
+      # both out of logs that may be shared.
       [ "$NET" != 1 ] || die "the expected text is not on screen after 15s; see $OUT/ui.xml"
       die "none of [$*] on screen after 15s; visible: $(printf '%s\n' "$ui" | grep -oE 'text="[^"]+"' | head -10 | paste -sd ' ' -)"
     fi
@@ -450,17 +441,13 @@ if [ "$NET" = 1 ]; then
   pass "0005 netmap decoded: peer list shown"
 
   # 0007: peer details format a key expiry with java.time (TimeUtil).
-  if [ -n "${T0007:-}" ]; then
-    wait_for 90 "the 0007 target in the emulator's peer list (can tag:fireos-ci see the expiring node this host sees?)" \
-      scroll_to 40 "${T0007//./\\.}"
-    tap_text "$T0007"
-    exp='in [0-9.]+ (minutes|hours|days|months|years)|under a minute|[0-9.]+ (minutes|hours|days|months|years) ago'
-    wait_for 40 "0007 a formatted key expiry in its details" scroll_to 15 "$exp"
-    pass "0007 java.time at runtime: key expiry of $T0007_WHO formatted"
-    adb shell input keyevent KEYCODE_BACK
-  else
-    skip "0007 runtime: no node with an expiring key is visible (the runner's tagged key never expires); covered by the local run"
-  fi
+  wait_for 90 "the 0007 target in the emulator's peer list (can tag:fireos-ci see the expiring node this host sees?)" \
+    scroll_to 40 "${T0007//./\\.}"
+  tap_text "$T0007"
+  exp='in [0-9.]+ (minutes|hours|days|months|years)|under a minute|[0-9.]+ (minutes|hours|days|months|years) ago'
+  wait_for 40 "0007 a formatted key expiry in its details" scroll_to 15 "$exp"
+  pass "0007 java.time at runtime: key expiry of $T0007_WHO formatted"
+  adb shell input keyevent KEYCODE_BACK
 
   # 0010: a network change while connected; the tunnel must follow the new network.
   data_toggle 0010
