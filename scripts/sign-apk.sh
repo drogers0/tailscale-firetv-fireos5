@@ -76,7 +76,7 @@ resolve_pass() {
   elif [ -n "$PASSFILE" ] && [ -f "$PASSFILE" ]; then
     p="$(cat "$PASSFILE")"
   else
-    { read -rsp "Keystore passphrase: " p </dev/tty && echo >/dev/tty; } 2>/dev/null || p=""
+    { read -rsp "Keystore passphrase: " p </dev/tty 2>/dev/tty && echo >/dev/tty; } 2>/dev/null || p=""
   fi
   [ -n "$p" ] || die "no keystore passphrase: set TS_KEYSTORE_PASSWORD (in CI, the repo secret), or store it in the Keychain or $PASSFILE"
   printf '%s' "$p"

@@ -118,10 +118,13 @@ jobs:
     # "Allow GitHub Actions to create and approve pull requests"). Such a PR starts no CI of its
     # own (its pull_request runs wait for approval), so this job dispatches ci.yml on the
     # branch, which produces the required checks on its head commit (docs/RELEASING.md).
+    # Only from main, so a run dispatched from another branch cannot propose that branch's commits;
+    # the ts_ref test hook (throwaway test PRs, docs/RELEASING.md) may run from any branch.
     needs: [resolve, tiers]
     if: >-
       !cancelled() && needs.resolve.result == 'success' && needs.resolve.outputs.skip == 'false' &&
-      (needs.resolve.outputs.current == 'true' || needs.tiers.result == 'success')
+      (needs.resolve.outputs.current == 'true' || needs.tiers.result == 'success') &&
+      (github.ref == 'refs/heads/main' || inputs.ts_ref != '')
     concurrency: { group: upstream-bump }
     runs-on: ubuntu-24.04
     timeout-minutes: 5
