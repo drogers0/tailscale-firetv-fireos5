@@ -152,6 +152,10 @@ adb shell am broadcast -a com.tailscale.ipn.USE_EXIT_NODE \
 > node that is the full FQDN, not the short hostname. A mismatch fails silently apart from
 > a notification.
 
+> [!CAUTION]
+> Clear an exit node in the UI, never with this broadcast minus `exitNode`: on 1.104.5 that
+> leaves a job that crashes the app at every boot (see the poison-pill gotcha below).
+
 Routes only take effect once the tunnel is re-established, so reconnect afterwards:
 
 ```sh
@@ -226,15 +230,29 @@ see netmap, DERP, `wgcfg` and socket-binding activity. Kotlin crashes still go t
 
 ## Gotcha: poison-pill work items
 
-On builds without 0006 (early 1.98.8 builds; upstream fixed the cause at 1.104.5), a failed
-`USE_EXIT_NODE` broadcast persists a WorkManager job that crashes the app on **every** start.
-Clear it without losing the login:
+A WorkManager job that crashes the app is persisted and re-run on **every** start, so one bad
+broadcast becomes a crash loop.
+
+- **1.98.8 without 0006** (early builds): a failed `USE_EXIT_NODE` broadcast did this through
+  expedited work. Upstream fixed that cause at 1.104.5, and 0006 is retired.
+- **1.104.5**, from a different upstream path: a `USE_EXIT_NODE` broadcast **with no
+  `exitNode`** leaves a `UseExitNodeWorker` job that never finishes. WorkManager re-runs it at
+  boot before the app has started libtailscale, and the app dies with
+  `UninitializedPropertyAccessException`. Documented, intentionally not patched (it is not
+  API-22 debt); see TESTING.md, "Known gaps".
+
+Clear the jobs without losing the login. The `sh -c` matters: without it the device shell
+expands the glob as the shell user, which cannot list the app's files, and nothing is deleted.
 
 ```sh
-adb shell run-as com.tailscale.ipn rm -f databases/androidx.work.workdb*
+adb shell am force-stop com.tailscale.ipn
+adb shell "run-as com.tailscale.ipn sh -c 'rm -f databases/androidx.work.workdb*'"
 ```
 
-`files/profile-data` holds the login and is untouched.
+`files/profile-data` holds the login and is untouched. Verified on the API 22 emulator: after
+three crashing boots, two clean ones. Clearing the app's data (`adb shell pm clear
+com.tailscale.ipn`) or uninstalling also removes the jobs, but logs out; an `adb install -r`
+over the top keeps them.
 
 ## Device under test
 

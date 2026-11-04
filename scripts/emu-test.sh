@@ -396,21 +396,6 @@ wait_for 15 "0009 'VPN permission needed' dialog" ui_has "VPN permission needed"
 pass "0009 consent denied: 'VPN permission needed', no crash"
 tap_text Cancel
 
-# USE_EXIT_NODE (no extras: clear the exit node) is expedited work too, and UseExitNodeWorker is
-# a CoroutineWorker, a different getForegroundInfo() path. Its failure on 1.98.8 left a job that
-# crashed the app on every start; 0006 was retired on upstream's fix, which this exercises.
-# Sent once the app has started libtailscale: before that, upstream's worker crashes on any API
-# level (LocalAPI Request.app is uninitialized). Its doWork() then never returns (it joins a bare
-# Job()), so the check is that it reached doWork() through the foreground service: its prefs
-# PATCH is the only one at this point. Both upstream bugs: TESTING.md, "Known gaps".
-n="$(app_log | grep -c 'WM-SystemFgDispatcher: Started foreground service')" || true
-adb shell am broadcast -a "$PKG.USE_EXIT_NODE" -n "$PKG/.IPNReceiver" >/dev/null
-wait_log "USE_EXIT_NODE UseExitNodeWorker's prefs PATCH" "LocalAPIRequest: Executing request:PATCH:/localapi/v0/prefs"
-[ "$(app_log | grep -c 'WM-SystemFgDispatcher: Started foreground service')" -gt "$n" ] \
-  || die "USE_EXIT_NODE: UseExitNodeWorker did not run in WorkManager's foreground service"
-no_crash USE_EXIT_NODE
-pass "USE_EXIT_NODE expedited UseExitNodeWorker reached doWork() in the foreground service, no crash"
-
 # 0010: losing the network and getting a new one must move the default network.
 data_toggle 0010
 pass "0010 data off/on: default network $old -> $(default_net)"

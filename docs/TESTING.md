@@ -28,7 +28,6 @@ and keeps its logs in `.build/emu-test/`.
 | 0011 | 2 | `CONNECT_VPN` before any launch (logged out, no consent) runs `StartVPNWorker` as expedited work in WorkManager's foreground service and posts the "open Tailscale" notification |
 | 0002, 0010 | 2 | launch with no missing-API error; a default network is picked at startup |
 | 0009 | 2 | denying VPN consent shows "VPN permission needed", with no crash |
-| (0006, retired) | 2 | after launch, `USE_EXIT_NODE` runs the expedited `UseExitNodeWorker` (a `CoroutineWorker`) in WorkManager's foreground service as far as its prefs edit, with no crash |
 | 0010 | 2 | mobile data off and on moves the default network |
 | 0001, 0003 | 2 | `IPNService` runs in the foreground |
 | 0008 | 2 | a reboot while logged out: `BootReceiver` stays disconnected, no tunnel |
@@ -49,16 +48,20 @@ Known gaps:
 - **0007** at tier 2 is static, because its `java.time` calls need a netmap. Tier 3 runs them by
   opening the details of a node whose key expires; tagged nodes, like the emulator, never expire.
 - **0009** relies on a fresh install having no VPN consent, rather than revoking it.
-- **`USE_EXIT_NODE` before the app has started** crashes it, on any API level: with no exit
-  node named, upstream's `UseExitNodeWorker` calls the LocalAPI before `App.startLibtailscale()`
-  has set `Request.app` (`UninitializedPropertyAccessException`). Tier 2 therefore sends it
-  after launch. Not patched here: it is not API-22 debt.
-- **`UseExitNodeWorker` never finishes** on any API level: after its prefs edit it joins a bare
-  `Job()` that nothing completes. The edit applies, but no worker result is ever logged, so
-  tier 2 checks the prefs `PATCH` instead.
+- **No tier sends `USE_EXIT_NODE`.** Upstream's `UseExitNodeWorker` has two bugs, on any API
+  level, that this repo documents and intentionally does not patch:
+  - It never finishes: after its prefs edit it joins a bare `Job()` that nothing completes, so
+    WorkManager keeps the job and re-runs it at the next boot.
+  - Run before the app has started libtailscale, with no exit node named, it calls the LocalAPI
+    before `Request.app` is set and the process dies (`UninitializedPropertyAccessException`).
+
+  Together, one `USE_EXIT_NODE` broadcast with no `exitNode` crashes the app at **every** later
+  boot; on the API 22 emulator it crashed on each of three boots. A named exit node also hangs,
+  but finds no netmap at the next boot and fails cleanly. Recovery: STATUS, "Gotcha:
+  poison-pill work items".
 - **0005 at tier 3.** The first `PeersChanged` update carries every peer (12, plus the node
-  itself, on the tailnet used so far), which may stay under 16 KB, and tier 3 then proves only that decoding works.
-  The build-time guard against stream decodes covers the call sites; the release checklist
+  itself, on the tailnet used so far), which may stay under 16 KB, and tier 3 then proves only
+  that decoding works. The build-time guard against stream decodes covers the call sites; the release checklist
   covers a large payload on hardware.
 - **0013 at tier 3.** Only the listener half is visible. `newBuilder()`'s `null` logs nothing,
   so it is checked on hardware.
