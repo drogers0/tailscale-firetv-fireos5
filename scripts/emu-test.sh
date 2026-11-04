@@ -470,13 +470,6 @@ if [ "$NET" = 1 ]; then
   wait_for 60 "host -> emulator after the network change" reachable "$EMU_IP"
   tun_up || die "0010: the tunnel is gone after the network change (or netcfg failed)"
   pass "0010 network change while connected: $old -> $(default_net), tunnel kept"
-  # 0013: below API 23 the VPN follows the system default network; nothing pins one. This
-  # covers the listener half (it returns before logging). newBuilder()'s null logs nothing:
-  # the device checklist covers it (other apps see a network after a reboot).
-  al="$(app_log)" || die "0013: no $PKG process in this boot's log"
-  printf '%s\n' "$al" | grep -E '(Set|set) underlying network' >/dev/null \
-    && die "0013: the VPN's underlying network was set explicitly"
-  pass "0013 underlying network left to the system across the network change"
 
   # 0008: reboot while connected. BootReceiver restarts the VPN without the app being opened.
   reboot_app "0008 connected"

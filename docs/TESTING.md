@@ -36,7 +36,6 @@ and keeps its logs in `.build/emu-test/`.
 | 0005 | 3 | the first `PeersChanged` update, which carries every peer, decodes (the debug build logs it), and the emulator's own address is in its peer list |
 | 0007 | 3 | a node's details show a formatted key expiry (`java.time` at runtime) |
 | 0010 | 3 | mobile data off and on while connected: a new default network, the tunnel still works |
-| 0013 | 3 | across that network change the app never sets the VPN's underlying network (the listener half; the device check covers `newBuilder()`) |
 | 0008 | 3 | a reboot while connected brings the tunnel back without opening the app; a disconnect followed by a reboot stays down |
 
 Every wait also fails fast on a crash, a native fatal signal, a failed worker, a dropped IPN
@@ -63,8 +62,6 @@ Known gaps:
   itself, on the tailnet used so far), which may stay under 16 KB, and tier 3 then proves only
   that decoding works. The build-time guard against stream decodes covers the call sites; the release checklist
   covers a large payload on hardware.
-- **0013 at tier 3.** Only the listener half is visible. `newBuilder()`'s `null` logs nothing,
-  so it is checked on hardware.
 - **NewApi lint is blind inside `@RequiresApi(TIRAMISU)` functions** (upstream's
   `MainActivity.onCreate` and `SearchView`): lint treats their bodies as running at API 33.
   `onCreate` is called only by the system, so none of its body (all of `setContent`) is linted.
@@ -120,8 +117,7 @@ On a Fire TV Stick (Fire OS 5):
 - [ ] The tunnel stays up for at least 30 minutes.
 - [ ] Exit-node traffic shows on the tunnel's counters (see the tip in
       [STATUS.md](STATUS.md#verified-end-to-end)).
-- [ ] A reboot while connected brings the tunnel back (0008) on Fire OS, and other apps still
-      see a network: Settings › Network or a streaming app shows connected (0013).
+- [ ] A reboot while connected brings the tunnel back (0008) on Fire OS.
 - [ ] A disconnect followed by a reboot stays down.
 - [ ] `logcat` has no `failed to process IPN notification` and no `Bad position` (0005 on a
       real tailnet's peer list).

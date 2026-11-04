@@ -87,16 +87,19 @@ if any does not.
 | 0010 | read the initial network state in `NetworkChangeCallback.onAvailable` | 26 |
 | 0011 | `Notification.Builder(Context, String)` in `StartVPNWorker` → `NotificationCompat` | 26 |
 | 0012 | drop the debug-only `integration.LOGIN` broadcast (exported, no permission) | — (security) |
-| 0013 | `setUnderlyingNetworks(null)` below API 23, as 1.98.8 did (an empty array can stick if the network arrives during `establish()`) | 23 |
 
 Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
 these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
-API 24 — **0008**, which adds what upstream gets from always-on VPN, **0012**, a security fix
-for this repo's debug builds, and **0013**, which keeps 1.98.8's "follow the default network"
-in place of upstream's explicit underlying network. 0006 is retired.
+API 24 — **0008**, which adds what upstream gets from always-on VPN, and **0012**, a security
+fix for this repo's debug builds. 0006 is retired.
 
 Netmap disk caching is off, as upstream ships it: the native library is built with
 upstream's `GOMOBILE_BUILD_TAGS`.
+
+An upstream race, not patched because it is not specific to API 22: a default network that
+arrives between `newBuilder()`'s read of `cachedDefaultNetwork` and `establish()` is missed, and
+the VPN keeps an empty underlying-network array until the default network changes again.
+Most likely at boot, on any API level.
 
 ### 0005 is the interesting one
 
