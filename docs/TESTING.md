@@ -28,6 +28,7 @@ and keeps its logs in `.build/emu-test/`.
 | 0011 | 2 | `CONNECT_VPN` before any launch (logged out, no consent) runs `StartVPNWorker` as expedited work in WorkManager's foreground service and posts the "open Tailscale" notification |
 | 0002, 0010 | 2 | launch with no missing-API error; a default network is picked at startup |
 | 0009 | 2 | denying VPN consent shows "VPN permission needed", with no crash |
+| (0006, retired) | 2 | after launch, `USE_EXIT_NODE` runs the expedited `UseExitNodeWorker` (a `CoroutineWorker`) in WorkManager's foreground service as far as its prefs edit, with no crash |
 | 0010 | 2 | mobile data off and on moves the default network |
 | 0001, 0003 | 2 | `IPNService` runs in the foreground |
 | 0008 | 2 | a reboot while logged out: `BootReceiver` stays disconnected, no tunnel |
@@ -48,8 +49,15 @@ Known gaps:
 - **0007** at tier 2 is static, because its `java.time` calls need a netmap. Tier 3 runs them by
   opening the details of a node whose key expires; tagged nodes, like the emulator, never expire.
 - **0009** relies on a fresh install having no VPN consent, rather than revoking it.
-- **0005 at tier 3.** The first `PeersChanged` update carries every peer (13 on the tailnet
-  used so far), which may stay under 16 KB, and tier 3 then proves only that decoding works.
+- **`USE_EXIT_NODE` before the app has started** crashes it, on any API level: with no exit
+  node named, upstream's `UseExitNodeWorker` calls the LocalAPI before `App.startLibtailscale()`
+  has set `Request.app` (`UninitializedPropertyAccessException`). Tier 2 therefore sends it
+  after launch. Not patched here: it is not API-22 debt.
+- **`UseExitNodeWorker` never finishes** on any API level: after its prefs edit it joins a bare
+  `Job()` that nothing completes. The edit applies, but no worker result is ever logged, so
+  tier 2 checks the prefs `PATCH` instead.
+- **0005 at tier 3.** The first `PeersChanged` update carries every peer (12, plus the node
+  itself, on the tailnet used so far), which may stay under 16 KB, and tier 3 then proves only that decoding works.
   The build-time guard against stream decodes covers the call sites; the release checklist
   covers a large payload on hardware.
 - **0013 at tier 3.** Only the listener half is visible. `newBuilder()`'s `null` logs nothing,
@@ -103,9 +111,9 @@ On a Fire TV Stick (Fire OS 5):
 - [ ] The UI renders and navigates on Mali-450 / GLES 2.0 with the remote's D-pad, and `logcat`
       has no `glerror`. The app appears in the Amazon launcher.
 - [ ] No Google Play services prompts or errors in `logcat` at start-up and login.
-- [ ] Log in; the tunnel is up; peers are listed; the stick is reachable from another device.
-      The tunnel is the `tunN` that `adb shell netcfg` lists as `UP` with a `100.x` address;
-      it can be `tun1` after a reconnect.
+- [ ] Log in; the tunnel is up (find its `tunN` as in the
+      [STATUS tip](STATUS.md#verified-end-to-end)); peers are listed; the stick is reachable
+      from another device.
 - [ ] The tunnel stays up for at least 30 minutes.
 - [ ] Exit-node traffic shows on the tunnel's counters (see the tip in
       [STATUS.md](STATUS.md#verified-end-to-end)).

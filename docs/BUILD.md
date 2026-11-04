@@ -64,12 +64,13 @@ Point it at the right one explicitly if you have several installed:
 # macOS
 export JAVA_HOME=$(/usr/libexec/java_home -F -v "$(sed -n 's/^JDK=//p' scripts/build.sh)")
 # Linux
-export JAVA_HOME=/usr/lib/jvm/java-<JDK>-openjdk-amd64
+export JAVA_HOME=/usr/lib/jvm/java-"$(sed -n 's/^JDK=//p' scripts/build.sh)"-openjdk-amd64
 ```
 
-With `JAVA_HOME` unset, the script tries `java_home -F -v <JDK>`, then `~/.local/jdks/jdk-<JDK>*`,
-then the Debian path, and checks each candidate's major version itself: plain
-`java_home -v <JDK>` silently returns another JDK when that major is not registered.
+With `JAVA_HOME` unset, the script tries `java_home -F -v <JDK>`, then
+`~/.local/jdks/jdk-<JDK>*`, then the Debian path (`<JDK>` is the `JDK=` pin), and checks each
+candidate's major version itself: plain `java_home -v <JDK>` silently returns another JDK
+when that major is not registered.
 
 ## Build
 
@@ -101,6 +102,7 @@ Tunables stay environment variables read by `scripts/build.sh`; `make build TS_R
 | `JAVA_HOME` | autodetected, the pinned JDK | |
 | `WORKDIR` | `.build` | scratch checkout, one dir per ref |
 | `DIST` | `dist` | APK output dir, absolute or relative to the repo root; `make build-emu`, `emu-test` and `emu-test-net` use the Makefile's `EMU_DIST` (`.build/dist-emu`), `make lint` uses `LINT_DIST` (`.build/dist-lint`). An APK already at the output path is overwritten only if it is debug-signed, so a release-signed one is never replaced |
+| `GRADLE_HEAP` | `6g` | Gradle's `-Xmx`; build.sh writes it into the checkout's `gradle.properties` on every run |
 | `SKIP_TESTS` | `1` | set `0` to run upstream unit tests (debug variant) |
 | `LINT` | `0` | `1` runs Android Lint, `NewApi` only, with `patches/lint.xml`'s ignores |
 
@@ -209,7 +211,7 @@ lines into `scripts/build.sh`.
 
 **Gradle OOM / GC overhead**
 Compose compilation is memory-hungry and upstream ships `-Xmx2g`. The script raises this
-to 6 GB. On a small machine, lower it in `.build/.../android/gradle.properties`.
+to 6 GB. On a small machine, lower it with `GRADLE_HEAP`, e.g. `GRADLE_HEAP=3g make build`.
 
 ## Reproducibility
 
