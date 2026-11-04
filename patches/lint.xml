@@ -4,8 +4,9 @@
      reports fails tier 1. Keep entries narrow: match the exact API, never a whole file. -->
 <lint>
     <issue id="NewApi">
-        <!-- Public at API 29/30 but present as @hide public constructors on API 22: the
-             placeholder in NetworkChangeCallback.onAvailable ran on API 22 before 0010. -->
+        <!-- Public at API 29/30 but present as @hide public constructors on API 22: reached
+             on API 22 through 0010's `?: NetworkCapabilities()` and `?: LinkProperties()`
+             fallbacks in NetworkChangeCallback.onAvailable. -->
         <ignore regexp="android\.net\.(NetworkCapabilities|LinkProperties)\(\)" />
     </issue>
 </lint>
