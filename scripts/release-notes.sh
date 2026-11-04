@@ -19,7 +19,10 @@ CERT="$(sed -n 's/^CERT_SHA256=//p' "$REPO_ROOT/scripts/sign-apk.sh")"
 SHA="$(cut -d' ' -f1 < "$APK.sha256")" || die "no $APK.sha256"
 [ -n "$REF" ] && [ -n "$CERT" ] && [ -n "$SHA" ] || die "cannot read PINNED_REF, CERT_SHA256 or the sha256"
 NAME="$(basename "$APK")"
-REPO_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-drogers0/tailscale-firetv-fireos5}"
+# CI sets GITHUB_REPOSITORY; a local preview asks gh which repository this checkout is.
+REPO="${GITHUB_REPOSITORY:-$(cd "$REPO_ROOT" && gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)}"
+[ -n "$REPO" ] || die "cannot tell the GitHub repository; set GITHUB_REPOSITORY=<owner>/<repo>"
+REPO_URL="${GITHUB_SERVER_URL:-https://github.com}/$REPO"
 PATCHES="$(for p in "$REPO_ROOT"/patches/*.patch; do printf -- '- <code>%s</code>\n' "$(basename "$p" .patch)"; done)"
 
 # <code> rather than backticks, so the heredoc needs no escaping.

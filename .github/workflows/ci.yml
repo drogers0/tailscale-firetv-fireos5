@@ -52,17 +52,19 @@ jobs:
     needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 25        # cold runs take about 7 minutes
+    env:
+      # 'false' only for a direct dispatch (the bump branch's checks), whose entries no later run
+      # would restore. Drift's calls also see a workflow_dispatch or schedule event, but always
+      # pass ts_ref, and keep saving their `drift` Go entry.
+      SAVE_CACHES: ${{ inputs.ts_ref != '' || github.event_name != 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-build
         with:
           cache-key: ${{ inputs.ts_ref && 'drift' || 'tier1' }}
-          # The only writer of the shared SDK entry. Neither cache is saved by a dispatched run:
-          # it is on the bump branch, where an entry would serve no later run. Drift's calls
-          # keep saving their `drift` Go entry.
-          save-sdk: ${{ inputs.ts_ref != '' || github.event_name != 'workflow_dispatch' }}
-          save: ${{ inputs.ts_ref != '' || github.event_name != 'workflow_dispatch' }}
+          save-sdk: ${{ env.SAVE_CACHES }}   # the only writer of the shared SDK entry
+          save: ${{ env.SAVE_CACHES }}
       - run: make build
         env: { LINT: '1', SKIP_TESTS: '0' }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
