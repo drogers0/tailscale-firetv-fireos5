@@ -13,8 +13,8 @@ Tracks Tailscale's current stable release, patched to run at API 22. Each
 
 ## Status — working
 
-Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5, on 1.98.8; 1.104.5 passes tiers
-0-3 and awaits the same device check.
+Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5, on 1.98.8; 1.104.5 also passed
+tiers 0-3. Each release is checked on a Fire TV Stick before it is published.
 
 | | |
 |---|---|

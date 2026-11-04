@@ -8,9 +8,9 @@ end needs hardware.
 
 | Tier | What it catches | Runs | Command |
 |---|---|---|---|
-| 0 | a patch that no longer applies, shellcheck warnings, `verify-apk` regressions, stale toolchain pins, a stream JSON decode left in the patched tree | every PR, pushes to `main`, weekly upstream drift (new upstream releases) | `make check` |
-| 1 | build breaks, `NewApi` calls above API 22 (Android Lint), upstream unit tests | every PR, pushes to `main`, weekly upstream drift (new upstream releases) | `LINT=1 SKIP_TESTS=0 make build` |
-| 2 | API 22 runtime failures of each patch on an emulator, with no tailnet | PRs to `main`, pushes to `main`, weekly upstream drift (new upstream releases) | `make build-emu emu-test` |
+| 0 | a patch that no longer applies, shellcheck warnings, `verify-apk` regressions, stale toolchain pins, a stream JSON decode left in the patched tree | every PR (a bump PR's through a dispatched run), pushes to `main`, weekly upstream drift (new upstream releases) | `make check` |
+| 1 | build breaks, `NewApi` calls above API 22 (Android Lint), upstream unit tests | every PR (a bump PR's through a dispatched run), pushes to `main`, weekly upstream drift (new upstream releases) | `LINT=1 SKIP_TESTS=0 make build` |
+| 2 | API 22 runtime failures of each patch on an emulator, with no tailnet | PRs to `main` (a bump PR's through a dispatched run), pushes to `main`, weekly upstream drift (new upstream releases) | `make build-emu emu-test` |
 | 3 | the same emulator logged in to a real tailnet: tunnel, peers, reboots, network changes | by hand, locally | `make build-emu emu-test-net` |
 
 A PR that changes only Markdown files or `docs/` skips tiers 0-2.
