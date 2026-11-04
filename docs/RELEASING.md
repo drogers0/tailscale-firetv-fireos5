@@ -47,7 +47,7 @@ How the bot manages the PR:
 - Once `main` pins the latest release or a newer one, through the bot or by hand, the bot closes
   any open bump PR.
 - **A red `bump` job** in a Monday run means the bot could not push, open the PR or start its
-  checks. The drift issue was already closed by then, so this is the only signal. Read the
+  checks. The same run closes the drift issue, so this is the only signal. Read the
   job's log:
   - **`refusing to allow … workflow`:** `main` changed a workflow file since the bot branch
     was last pushed.

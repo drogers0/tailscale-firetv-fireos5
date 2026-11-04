@@ -158,8 +158,8 @@ other key leaves the APK and its `.sha256` unchanged. Signing with your own key?
 `CERT_SHA256` in `scripts/sign-apk.sh` to your certificate's SHA-256
 (`apksigner verify --print-certs`).
 
-A later `make build` of the same version refuses to overwrite the signed APK. Move it (for
-example to a release folder), or build with `DIST=<dir>`.
+A later `make build` of the same version refuses to overwrite the signed APK. Move it out of
+`dist/` first, or build with `DIST=<dir>`.
 
 ## Install and test
 

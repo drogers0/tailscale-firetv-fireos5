@@ -14,7 +14,7 @@ Tracks Tailscale's current stable release, patched to run at API 22. Each
 ## Status — working
 
 Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5, on 1.98.8; 1.104.5 also passed
-tiers 0-3. Each release is checked on a Fire TV Stick before it is published.
+tiers 0-3.
 
 | | |
 |---|---|
@@ -38,9 +38,9 @@ adb install -r dist/tailscale-fireos5-*.apk
 
 > [!TIP]
 > Prefer not to build? Download the APK from the [latest release](../../releases/latest) and
-> check it against the `.sha256` beside it. CI builds and signs each release from a tagged
-> commit on `main`, and each one is checked on a Fire TV Stick before it is published
-> ([docs/RELEASING.md](docs/RELEASING.md)).
+> check it against the `.sha256` beside it. Releases are signed with this project's release
+> key and checked on a Fire TV Stick before they are published; new ones are built and signed
+> by CI from a tagged commit on `main` ([docs/RELEASING.md](docs/RELEASING.md)).
 
 ## Documentation
 
