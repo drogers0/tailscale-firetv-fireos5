@@ -20,7 +20,7 @@ Anything else is a parity gap, even when it is convenient for building or testin
 The one accepted exception is shipping upstream's debug build instead of its release build: `run-as` is the only way to read Go logs and recover from crash loops without root, and tier 3 depends on its debug logging.
 
 - Do not add features, remove features, or change defaults.
-- Every patch header comment states which rule it meets and why it is needed.
+- `docs/STATUS.md`'s patch table states which rule each patch meets; the patch's comments say why.
 - When a substitute covers less than upstream's mechanism does, document what is missing in
   `docs/STATUS.md`. If the gap can be closed, close it.
 - Upstream bugs that also occur on supported devices are not parity debt. Document them, but
