@@ -125,22 +125,13 @@ fi
 
 export ANDROID_SERIAL="emulator-$PORT"
 # Every adb call is bounded: an `adb shell` to an emulator that is not up yet can block
-# forever, and then no wait_for deadline (BOOT_TIMEOUT included) ever fires. The watcher
-# exits within a second of adb, and its output goes to /dev/null so that a $(adb …) capture
-# never waits for it.
+# forever, and then no wait_for deadline (BOOT_TIMEOUT included) ever fires. perl's alarm
+# survives exec, so adb itself gets SIGALRM (exit 142) and stays in the foreground.
 ADB_TIMEOUT=30        # seconds per call; adb install passes its own
 adb() {
-  local rc=0 pid w i
-  "$SDK/platform-tools/adb" "$@" &
-  pid=$!
-  ( for ((i = 0; i < ADB_TIMEOUT; i++)); do sleep 1; kill -0 "$pid" || exit 0; done
-    kill "$pid" ) >/dev/null 2>&1 &
-  w=$!
-  wait "$pid" || rc=$?
-  # Stop the watcher now, before adb's PID can be reused; reaping it keeps bash 3.2 from
-  # reporting the watcher's "Terminated".
-  kill "$w" 2>/dev/null && wait "$w" 2>/dev/null || true
-  [ "$rc" != 143 ] || printf 'adb %s: no answer in %ss; killed\n' "$1" "$ADB_TIMEOUT" >&2
+  local rc=0
+  perl -e 'alarm shift; exec @ARGV' "$ADB_TIMEOUT" "$SDK/platform-tools/adb" "$@" || rc=$?
+  [ "$rc" != 142 ] || printf 'adb %s: no answer in %ss; killed\n' "$1" "$ADB_TIMEOUT" >&2
   return "$rc"
 }
 
