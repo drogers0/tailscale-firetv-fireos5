@@ -3,31 +3,61 @@ on:
   schedule:
     - cron: '17 6 * * 1'      # Mondays 06:17 UTC
   workflow_dispatch:
+    inputs:
+      ts_ref:
+        description: Test hook. Tests this upstream tag instead of the latest release, and proposes it as the bump, even if older
+        default: ''
 permissions:
   contents: read
 jobs:
   resolve:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions: { contents: read, pull-requests: read }
     outputs:
       ts_ref: ${{ steps.r.outputs.ts_ref }}
+      current: ${{ steps.r.outputs.current }}
+      skip: ${{ steps.r.outputs.skip }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
       - id: r
-        env: { GH_TOKEN: '${{ github.token }}' }
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_REF: ${{ inputs.ts_ref }}
         run: |
+          set -euo pipefail
           # Assign first: a failing $(...) inside echo would not trip -e, and an empty ref
           # would silently test the pinned ref and close a real drift issue.
-          ref="$(gh release view --repo tailscale/tailscale-android --json tagName --jq .tagName)"
-          [ -n "$ref" ] || { echo "::error::no upstream release tag resolved"; exit 1; }
-          echo "ts_ref=$ref" >> "$GITHUB_OUTPUT"
+          ref="$INPUT_REF"
+          [ -n "$ref" ] || ref="$(gh release view --repo tailscale/tailscale-android --json tagName --jq .tagName)"
+          # The ref reaches sed, git, URLs and titles: accept only upstream's tag shape.
+          [[ "$ref" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[A-Za-z0-9-]+$ ]] \
+            || { echo "::error::unexpected upstream release tag '$ref'"; exit 1; }
+          pinned="$(sed -n 's/^PINNED_REF=//p' scripts/build.sh)"
+          [ -n "$pinned" ] || { echo "::error::no PINNED_REF= line in scripts/build.sh"; exit 1; }
+          current=false skip=false
+          if [ "$ref" = "$pinned" ]; then
+            current=true
+          else
+            # One bump PR per upstream version: an open one is waiting for you, and a closed,
+            # unmerged one was declined. Either way there is nothing to test or report. Only the
+            # bot's own PRs count: --head matches a fork's branch of the same name too.
+            n="$(gh pr list --head bot/upstream-bump --state all --limit 100 --json title,state,author \
+              --jq "map(select(.author.login == \"app/github-actions\" and .title == \"Update to Tailscale ${ref%%-*}\" and .state != \"MERGED\")) | length")"
+            [ "$n" = 0 ] || skip=true
+          fi
+          { echo "ts_ref=$ref"; echo "current=$current"; echo "skip=$skip"; } >> "$GITHUB_OUTPUT"
   tiers:
     needs: resolve
+    # Main's own CI covers the pinned ref.
+    if: needs.resolve.outputs.current == 'false' && needs.resolve.outputs.skip == 'false'
     uses: ./.github/workflows/ci.yml
     with:
       ts_ref: ${{ needs.resolve.outputs.ts_ref }}
   report:
     needs: [resolve, tiers]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.resolve.outputs.skip != 'true' }}
     concurrency: { group: upstream-drift-report }   # overlapping runs must not both create an issue
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -37,22 +67,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RESULT: ${{ needs.tiers.result }}
+          CURRENT: ${{ needs.resolve.outputs.current }}
           TS_REF: ${{ needs.resolve.outputs.ts_ref }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DOCS_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/docs/RELEASING.md#when-the-bot-cannot-bump
         run: |
           set -euo pipefail
           label=upstream-drift
           gh label create "$label" --color B60205 --force \
-            --description "Latest upstream release fails tiers 0+1 with the current patch series"
+            --description "Latest upstream release fails tiers 0-2 with the current patch series"
           num="$(gh issue list --label "$label" --state open --json number --jq '.[0].number // empty')"
-          if [ "$RESULT" = success ]; then
-            [ -z "$num" ] || gh issue close "$num" --comment "Tiers 0+1 pass again against \`$TS_REF\`: $RUN_URL"
+          if [ "$CURRENT" = true ] || [ "$RESULT" = success ]; then
+            [ -n "$num" ] || exit 0
+            if [ "$CURRENT" = true ]; then msg="main now pins \`$TS_REF\`"
+            else msg="Tiers 0-2 pass against \`$TS_REF\`; the bump PR carries it"; fi
+            gh issue close "$num" --comment "$msg: $RUN_URL"
             exit 0
           fi
           key="upstream \`${TS_REF:-unresolved}\`"
-          body="Tiers 0+1 failed against $key (see the run for the failing stage): $RUN_URL"
+          body="Tiers 0-2 failed against $key (see the run for the failing stage): $RUN_URL
+
+          To fix it by hand: $DOCS_URL"
           if [ -z "$num" ]; then
-            gh issue create --title "Upstream drift: latest release fails tiers 0+1" --label "$label" --body "$body"
+            gh issue create --title "Upstream drift: latest release fails tiers 0-2" --label "$label" --body "$body"
             exit 0
           fi
           # Same ref as the last bot report: stay quiet. Human comments are ignored.
@@ -60,3 +97,58 @@ jobs:
             --jq '([.body] + [.comments[] | select(.author.login == "github-actions") | .body]) | last')"
           case "$last" in *"$key"*) exit 0 ;; esac
           gh issue comment "$num" --body "$body"
+  bump:
+    # Opens, updates or closes the one bump PR, with GITHUB_TOKEN (needs the repository setting
+    # "Allow GitHub Actions to create and approve pull requests"). Such a PR starts no CI of its
+    # own (its pull_request runs wait for approval), so this job dispatches ci.yml on the
+    # branch, which produces the required checks on its head commit (docs/RELEASING.md).
+    needs: [resolve, tiers]
+    if: >-
+      !cancelled() && needs.resolve.result == 'success' && needs.resolve.outputs.skip == 'false' &&
+      (needs.resolve.outputs.current == 'true' || needs.tiers.result == 'success')
+    concurrency: { group: upstream-bump }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: { contents: write, pull-requests: write, actions: write }
+    steps:
+      # The branch's tip now (main, on schedule), not the commit the run started from: a bump
+      # merged during the tiers must not be proposed again, and the bot branch's workflow files
+      # then match a branch's, which GITHUB_TOKEN (no workflows permission) needs in order to
+      # push them. Credentials are kept for the push; this job runs no upstream code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: '${{ github.ref }}' }
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT: ${{ needs.resolve.outputs.current }}
+          TS_REF: ${{ needs.resolve.outputs.ts_ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DOCS_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/docs/RELEASING.md#the-bump-pr
+          CI_URL: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/ci.yml?query=branch%3Abot%2Fupstream-bump
+        run: |
+          set -euo pipefail
+          branch=bot/upstream-bump
+          version="${TS_REF%%-*}"
+          title="Update to Tailscale $version"
+          open="$(gh pr list --head "$branch" --state open --json number,author \
+            --jq 'map(select(.author.login == "app/github-actions"))[0].number // empty')"
+          if [ "$CURRENT" = true ] || [ "$(sed -n 's/^PINNED_REF=//p' scripts/build.sh)" = "$TS_REF" ]; then
+            [ -z "$open" ] || gh pr close "$open" --delete-branch --comment "main already pins \`$TS_REF\`."
+            exit 0
+          fi
+          sed -i "s/^PINNED_REF=.*/PINNED_REF=$TS_REF/" scripts/build.sh
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -qC "$branch"
+          git commit -qam "$title" -m "Upstream release $TS_REF passes tiers 0-2 with the current patches: $RUN_URL"
+          git push -qf origin "$branch"
+          body="Upstream released [\`$TS_REF\`](https://github.com/tailscale/tailscale-android/releases/tag/$TS_REF) ([changelog](https://tailscale.com/changelog#client)). The current patch series and toolchain pins pass tiers 0-2 against it: $RUN_URL
+
+          This PR changes only \`PINNED_REF\` in \`scripts/build.sh\`.
+
+          The workflow started this PR's required checks itself, as a dispatched CI run on the branch: $CI_URL. If they do not reach the merge box, select **Approve workflows to run** there, or close and reopen this PR. When they pass, mark it ready and merge, then tag \`$version-fireos5-r1\` on \`main\` to build a draft release. Details: $DOCS_URL"
+          if [ -n "$open" ]; then
+            gh pr edit "$open" --title "$title" --body "$body"
+          else
+            gh pr create --draft --base main --head "$branch" --title "$title" --body "$body"
+          fi
+          gh workflow run ci.yml --ref "$branch"

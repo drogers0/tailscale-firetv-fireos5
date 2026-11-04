@@ -4,15 +4,17 @@ on:
   push:
     branches: [main]          # seeds caches PRs can read: setup-gradle saves only here, and
                               # actions/cache entries saved from main are visible to every PR
-  workflow_call:              # upstream-drift.yml runs tiers 0+1 against another ref
+  workflow_call:              # upstream-drift.yml runs tiers 0-2 against another ref
     inputs:
       ts_ref: { type: string, default: '' }
+  workflow_dispatch:          # upstream-drift.yml's bump job runs its PR's required checks this
+                              # way: a PR or push made with GITHUB_TOKEN starts no run of its own
 permissions:
   contents: read
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-env:                          # empty on PR/push: build.sh falls back to its pinned default
+env:                          # empty unless called: build.sh falls back to its pinned default
   TS_REF: ${{ inputs.ts_ref }}
 jobs:
   changes:
@@ -56,7 +58,11 @@ jobs:
       - uses: ./.github/actions/setup-build
         with:
           cache-key: ${{ inputs.ts_ref && 'drift' || 'tier1' }}
-          save-sdk: 'true'     # the only writer of the shared SDK cache entry
+          # The only writer of the shared SDK entry. Neither cache is saved by a dispatched run:
+          # it is on the bump branch, where an entry would serve no later run. Drift's calls
+          # keep saving their `drift` Go entry.
+          save-sdk: ${{ inputs.ts_ref != '' || github.event_name != 'workflow_dispatch' }}
+          save: ${{ inputs.ts_ref != '' || github.event_name != 'workflow_dispatch' }}
       - run: make build
         env: { LINT: '1', SKIP_TESTS: '0' }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -77,12 +83,10 @@ jobs:
   emulator:
     name: Tier 2 · API 22 emulator smoke tests
     needs: check
-    # PRs to main, and pushes to main, which seed the emulator cache PRs restore. Never
-    # under upstream-drift.yml: a called workflow sees the caller's schedule or
-    # workflow_dispatch event.
-    if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # Every run except PRs to other bases: pushes (main only), drift's calls, where tier 2
+    # gates the bump PR, and dispatched runs. Only PR and push runs save caches: a called
+    # workflow sees the caller's event, and a dispatched run's entries would serve no later run.
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 25        # cold runs take about 11 minutes
     steps:
@@ -91,6 +95,7 @@ jobs:
       - uses: ./.github/actions/setup-build
         with:
           cache-key: emulator  # save-sdk stays 'false': emulator packages never enter the shared SDK entry
+          save: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
       - uses: ./.github/actions/setup-emulator
         with:
           save: ${{ github.event_name == 'push' }}  # only main pushes write the emulator entry
