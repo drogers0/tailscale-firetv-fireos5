@@ -109,7 +109,8 @@ On a Fire TV Stick (Fire OS 5):
       [STATUS.md](STATUS.md#verified-end-to-end)).
 - [ ] A reboot while connected brings the tunnel back (0008) on Fire OS, and other apps still
       see a network: Settings › Network or a streaming app shows connected. If only that fails
-      and Wi-Fi off/on fixes it, it is upstream's boot race (STATUS, "Patches"), not a blocker.
+      and Wi-Fi off/on fixes it, reboot again: once is upstream's boot race (STATUS, "Patches");
+      every time blocks the release, because 0008 then leaves apps offline after every boot.
 - [ ] A disconnect followed by a reboot stays down.
 - [ ] `logcat` has no `failed to process IPN notification` and no `Bad position` (0005 on a
       real tailnet's peer list).
