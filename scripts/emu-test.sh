@@ -127,6 +127,8 @@ export ANDROID_SERIAL="emulator-$PORT"
 # Every adb call is bounded: an `adb shell` to an emulator that is not up yet can block
 # forever, and then no wait_for deadline (BOOT_TIMEOUT included) ever fires. perl's alarm
 # survives exec, so adb itself gets SIGALRM (exit 142) and stays in the foreground.
+# SIGALRM is reset in case the caller ignores it; stdin is /dev/null because `adb shell` on API 22
+# would forward it to the device.
 ADB_TIMEOUT=30        # seconds per call; adb install passes its own
 adb() {
   local rc=0
