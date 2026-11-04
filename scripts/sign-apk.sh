@@ -28,6 +28,10 @@
 #   TS_KEYSTORE_ENCRYPTED
 #                     optional path to a gpg-encrypted keystore (kept out of tree)
 #
+# CERT_SHA256 below pins the release certificate: a keystore with any other key (a wrong
+# secret, a test key) fails here instead of shipping an APK that cannot upgrade in place.
+# Someone signing with their own key changes that line.
+#
 # Create a keystore once with:
 #   keytool -genkeypair -v -keystore "$TS_KEYSTORE" -alias firetv \
 #           -keyalg RSA -keysize 4096 -validity 10950
@@ -37,6 +41,9 @@ set -euo pipefail
 KEYSTORE="${TS_KEYSTORE:-$HOME/.keystores/tailscale-firetv-release.jks}"
 PASSFILE="${TS_KEYSTORE_PASS_FILE:-$HOME/.keystores/tailscale-firetv-release.pass}"
 ALIAS="${TS_KEY_ALIAS:-firetv}"
+# The release certificate's SHA-256 (apksigner verify --print-certs). Bare NAME=value:
+# scripts/release-notes.sh reads it with sed.
+CERT_SHA256=b6e56d68dcbeb34236f90951e8e05f07e6a8dba90be17c0d82646a6a6da053b5
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -75,14 +82,14 @@ resolve_pass() {
 # 2. TS_KEYSTORE_ENCRYPTED   (optional out-of-tree gpg-encrypted keystore)
 # 3. plain on-disk keystore  (default: ~/.keystores/tailscale-firetv-release.jks)
 if [ -n "${TS_KEYSTORE_BASE64:-}" ]; then
-  CLEANUP_KS="$(mktemp -t tsks)"; chmod 600 "$CLEANUP_KS"
+  CLEANUP_KS="$(mktemp "${TMPDIR:-/tmp}/tsks.XXXXXX")"; chmod 600 "$CLEANUP_KS"
   printf '%s' "$TS_KEYSTORE_BASE64" | base64 --decode > "$CLEANUP_KS"
   KEYSTORE="$CLEANUP_KS"
   info "keystore: TS_KEYSTORE_BASE64 (CI secret)"
 elif [ -n "$ENCRYPTED" ] && [ -f "$ENCRYPTED" ]; then
   command -v gpg >/dev/null 2>&1 || die "gpg needed to decrypt $ENCRYPTED"
   PASS="$(resolve_pass)"
-  CLEANUP_KS="$(mktemp -t tsks)"; chmod 600 "$CLEANUP_KS"
+  CLEANUP_KS="$(mktemp "${TMPDIR:-/tmp}/tsks.XXXXXX")"; chmod 600 "$CLEANUP_KS"
   printf '%s' "$PASS" | gpg --batch --quiet --passphrase-fd 0 \
       --decrypt "$ENCRYPTED" > "$CLEANUP_KS" 2>/dev/null \
     || die "could not decrypt $ENCRYPTED (wrong passphrase?)"
@@ -101,21 +108,26 @@ fi
 
 [ -f "$KEYSTORE" ] || die "keystore not found: $KEYSTORE (see header for how to create one)"
 
-APKSIGNER="$(ls "${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}"/build-tools/*/apksigner 2>/dev/null | tail -1 || true)"
+APKSIGNER="$(ls "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"/build-tools/*/apksigner 2>/dev/null | tail -1 || true)"
 [ -n "$APKSIGNER" ] || die "apksigner not found in the Android SDK build-tools"
 
 [ -n "${PASS:-}" ] || PASS="$(resolve_pass)"
 
 info "Signing $(basename "$APK")"
-"$APKSIGNER" sign \
+# env:, not pass:, so the passphrase never appears on a command line (ps, /proc).
+TS_SIGN_PASS="$PASS" "$APKSIGNER" sign \
   --ks "$KEYSTORE" \
   --ks-key-alias "$ALIAS" \
-  --ks-pass "pass:$PASS" \
-  --key-pass "pass:$PASS" \
+  --ks-pass env:TS_SIGN_PASS \
+  --key-pass env:TS_SIGN_PASS \
   "$APK"
 
 info "Verifying"
-"$APKSIGNER" verify --print-certs "$APK" | grep -E "Signer #1 certificate (DN|SHA-256)" || true
+certs="$("$APKSIGNER" verify --print-certs "$APK")" || die "apksigner verify failed on $APK"
+got="$(printf '%s\n' "$certs" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+[ "$got" = "$CERT_SHA256" ] \
+  || die "$APK is signed with certificate ${got:-<none>}, not the release key $CERT_SHA256 (wrong keystore or alias?)"
+printf '%s\n' "$certs" | grep -E '^Signer #1 certificate (DN|SHA-256)'
 
 # refresh the checksum so it matches the signed bytes
 ( cd "$(dirname "$APK")" && shasum -a 256 "$(basename "$APK")" > "$(basename "$APK").sha256" )
