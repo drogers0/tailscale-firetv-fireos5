@@ -119,9 +119,8 @@ jobs:
           gh issue comment "$num" --body "$body"
   bump:
     # Opens, updates or closes the one bump PR, with GITHUB_TOKEN (needs the repository setting
-    # "Allow GitHub Actions to create and approve pull requests"). Such a PR starts no CI of its
-    # own (its pull_request runs wait for approval), so this job dispatches ci.yml on the
-    # branch, which produces the required checks on its head commit (docs/RELEASING.md).
+    # "Allow GitHub Actions to create and approve pull requests"). Such a PR's pull_request runs
+    # wait for approval in its merge box (docs/RELEASING.md).
     # Only from main, so a run dispatched from another branch cannot propose that branch's commits;
     # the ts_ref test hook (docs/RELEASING.md) may run from any branch.
     needs: [resolve, tiers]
@@ -132,12 +131,13 @@ jobs:
     concurrency: { group: upstream-bump }
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    permissions: { contents: write, pull-requests: write, actions: write }
+    permissions: { contents: write, pull-requests: write }
     steps:
       # The branch's tip now (main, on schedule), not the commit the run started from: a bump
       # merged during the tiers must not be proposed again. The pushed branch then carries
       # main's workflow files unchanged (a ts_ref run from another branch carries that branch's),
-      # which is all GITHUB_TOKEN (no workflows permission) may push. Credentials are kept for the push; this job runs no upstream code.
+      # which is all GITHUB_TOKEN (no workflows permission) may push. Credentials are kept for
+      # the push; this job runs no upstream code.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: '${{ github.ref }}' }
       - env:
@@ -147,7 +147,6 @@ jobs:
           INPUT_REF: ${{ inputs.ts_ref }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           DOCS_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/docs/RELEASING.md#the-bump-pr
-          CI_URL: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/ci.yml?query=branch%3Abot%2Fupstream-bump
         run: |
           set -euo pipefail
           branch=bot/upstream-bump
@@ -175,10 +174,9 @@ jobs:
 
           This PR changes only \`PINNED_REF\` in \`scripts/build.sh\`.
 
-          The workflow started this PR's required checks itself, as a dispatched CI run on the branch: $CI_URL. If they do not reach the merge box, select **Approve workflows to run** there, or close and reopen this PR. When they pass, mark it ready and merge, then tag \`$version-fireos5-r1\` on \`main\` to build a draft release. Details: $DOCS_URL"
+          Its required checks wait for you: select **Approve workflows to run** in the merge box (within 30 days), or close and reopen this PR. When they pass, mark it ready and merge, then tag \`$version-fireos5-r1\` on \`main\` to build a draft release. Details: $DOCS_URL"
           if [ -n "$open" ]; then
             gh pr edit "$open" --title "$title" --body "$body"
           else
             gh pr create --draft --base main --head "$branch" --title "$title" --body "$body"
           fi
-          gh workflow run ci.yml --ref "$branch"

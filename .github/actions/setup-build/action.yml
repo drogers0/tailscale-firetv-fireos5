@@ -8,7 +8,7 @@ inputs:
     description: Save the shared Android SDK cache entry on a miss. Only the plain build passes 'true'; jobs that add SDK packages must not
     default: 'false'
   save:
-    description: Save Go and Gradle cache entries. 'false' makes both restore-only, for runs whose entries nothing would restore (release tags, drift's emulator job, dispatched runs)
+    description: Save Go and Gradle cache entries. 'false' makes both restore-only, for runs whose entries nothing would restore (release tags, drift's emulator job)
     default: 'true'
 runs:
   using: composite

@@ -13,7 +13,7 @@ end needs hardware.
 | 2 | API 22 runtime failures of each patch on an emulator, with no tailnet | PRs to `main`, pushes to `main`, weekly drift | `make build-emu emu-test` |
 | 3 | the same emulator logged in to a real tailnet: tunnel, peers, reboots, network changes | by hand, locally | `make build-emu emu-test-net` |
 
-A bump PR's tiers run through a dispatched run ([RELEASING.md](RELEASING.md#the-bump-pr)); the
+A bump PR's tiers run once you approve them ([RELEASING.md](RELEASING.md#the-bump-pr)); the
 weekly drift run tests only a new upstream release. A PR that changes only Markdown files or
 `docs/` skips tiers 0-2.
 

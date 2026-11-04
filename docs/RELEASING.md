@@ -10,7 +10,7 @@ Publishing waits for a check on a Fire TV.
 ```mermaid
 flowchart LR
   U[upstream stable release] --> D["upstream-drift.yml (Mondays): tiers 0-2"]
-  D -- pass --> P[draft bump PR, CI dispatched]
+  D -- pass --> P[draft bump PR]
   D -- fail --> I[upstream-drift issue]
   P -- you merge --> M[main]
   M -- you push a tag --> R["release.yml: build, sign, draft release"]
@@ -27,14 +27,10 @@ counts too), the workflow runs tiers 0-2 against it, using `main`'s patches and 
 **Pass:** the bot opens a draft PR from `bot/upstream-bump`, titled
 "Update to Tailscale <version>". The PR changes only `PINNED_REF`.
 
-1. **Its checks start on their own.** After pushing, the bot dispatches `ci.yml` on the
-   branch. That run reports the 4 required checks on the PR's head commit. Its link is in the
-   PR body.
-   - GitHub also creates the PR's own `pull_request` runs, but holds them for approval because
-     a workflow opened the PR. You can ignore them.
-   - **If the checks do not reach the merge box,** select **Approve workflows to run** there
-     within 30 days; after that the held runs expire. Or close and reopen the PR:
-     `gh pr close <n> && gh pr reopen <n>`. Either one runs the normal PR checks.
+1. **Start its checks.** GitHub holds the PR's CI runs for approval, because a workflow opened
+   the PR. Select **Approve workflows to run** in the merge box within 30 days (after that the
+   held runs expire), or close and reopen the PR: `gh pr close <n> && gh pr reopen <n>`.
+   Either one runs the normal PR checks.
 2. **When they pass,** mark the PR ready and merge it (`gh pr ready <n>`, then
    `gh pr merge <n> --squash`).
 
@@ -46,9 +42,8 @@ How the bot manages the PR:
   back, reopen the PR while it is still the newest bump, or bump by hand (see the next section).
 - Once `main` pins the latest release or a newer one, through the bot or by hand, the bot closes
   any open bump PR.
-- **A red `bump` job** in a Monday run means the bot could not push, open the PR or start its
-  checks. The same run closes the drift issue, so this is the only signal. Read the
-  job's log:
+- **A red `bump` job** in a Monday run means the bot could not push or open the PR. The same
+  run closes the drift issue, so this is the only signal. Read the job's log:
   - **`refusing to allow … workflow`:** `main` changed a workflow file since the bot branch
     was last pushed.
     1. Delete the bot branch: `git push origin --delete bot/upstream-bump`. This also closes
@@ -159,8 +154,7 @@ It refuses:
   CLI form:
   `gh api -X PUT repos/{owner}/{repo}/actions/permissions/workflow -f default_workflow_permissions=read -F can_approve_pull_request_reviews=true`.
 
-  The bot still cannot make its own PR start CI, so it dispatches the checks instead (see "The
-  bump PR").
+  The bot still cannot make its own PR start CI; you approve its checks (see "The bump PR").
 
 ## Reproducibility
 

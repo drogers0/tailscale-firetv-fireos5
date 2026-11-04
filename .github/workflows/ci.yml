@@ -7,8 +7,6 @@ on:
   workflow_call:              # upstream-drift.yml runs tiers 0-2 against another ref
     inputs:
       ts_ref: { type: string, default: '' }
-  workflow_dispatch:          # upstream-drift.yml's bump job runs its PR's required checks this
-                              # way: a PR or push made with GITHUB_TOKEN starts no run of its own
 permissions:
   contents: read
 concurrency:
@@ -52,19 +50,13 @@ jobs:
     needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 25        # cold runs take about 7 minutes
-    env:
-      # 'false' only for a direct dispatch (the bump branch's checks), whose entries no later run
-      # would restore. Drift's calls also see a workflow_dispatch or schedule event, but always
-      # pass ts_ref, and keep saving their `drift` Go entry.
-      SAVE_CACHES: ${{ inputs.ts_ref != '' || github.event_name != 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-build
         with:
           cache-key: ${{ inputs.ts_ref && 'drift' || 'tier1' }}
-          save-sdk: ${{ env.SAVE_CACHES }}   # the only writer of the shared SDK entry
-          save: ${{ env.SAVE_CACHES }}
+          save-sdk: 'true'     # the only writer of the shared SDK cache entry
       - run: make build
         env: { LINT: '1', SKIP_TESTS: '0' }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -85,9 +77,9 @@ jobs:
   emulator:
     name: Tier 2 · API 22 emulator smoke tests
     needs: check
-    # Every run except PRs to other bases: pushes (main only), drift's calls, where tier 2
-    # gates the bump PR, and dispatched runs. Only PR and push runs save caches: a called
-    # workflow sees the caller's event, and a dispatched run's entries would serve no later run.
+    # Every run except PRs to other bases: pushes (main only) and drift's calls, where tier 2
+    # gates the bump PR. Only PR and push runs save caches: a called workflow sees the caller's
+    # event.
     if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 25        # cold runs take about 11 minutes
