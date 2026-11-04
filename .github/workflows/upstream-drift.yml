@@ -65,7 +65,11 @@ jobs:
       ts_ref: ${{ needs.resolve.outputs.ts_ref }}
   report:
     needs: [resolve, tiers]
-    if: ${{ !cancelled() && needs.resolve.outputs.skip != 'true' }}
+    # Like bump, only from main or the ts_ref test hook: a feature-branch run must not open or
+    # close the drift issue on the strength of that branch's PINNED_REF.
+    if: >-
+      !cancelled() && needs.resolve.outputs.skip != 'true' &&
+      (github.ref == 'refs/heads/main' || inputs.ts_ref != '')
     concurrency: { group: upstream-drift-report }   # overlapping runs must not both create an issue
     runs-on: ubuntu-24.04
     timeout-minutes: 5
