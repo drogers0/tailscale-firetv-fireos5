@@ -47,17 +47,7 @@ Known gaps:
 - **0007** at tier 2 is static, because its `java.time` calls need a netmap. Tier 3 runs them by
   opening the details of a node whose key expires; tagged nodes, like the emulator, never expire.
 - **0009** relies on a fresh install having no VPN consent, rather than revoking it.
-- **No tier sends `USE_EXIT_NODE`.** Upstream's `UseExitNodeWorker` has two bugs, on any API
-  level, that this repo documents and intentionally does not patch:
-  - It never finishes: after its prefs edit it joins a bare `Job()` that nothing completes, so
-    WorkManager keeps the job and re-runs it at the next boot.
-  - Run before the app has started libtailscale, with no exit node named, it calls the LocalAPI
-    before `Request.app` is set and the process dies (`UninitializedPropertyAccessException`).
-
-  Together, one `USE_EXIT_NODE` broadcast with no `exitNode` crashes the app at **every** later
-  boot; on the API 22 emulator it crashed on each of three boots. A named exit node also hangs,
-  but finds no netmap at the next boot and fails cleanly. Recovery: STATUS, "Gotcha:
-  poison-pill work items".
+- **No tier sends `USE_EXIT_NODE`:** an upstream bug; see STATUS, "Gotcha: poison-pill work items".
 - **0005 at tier 3.** The first `PeersChanged` update carries every peer (12, plus the node
   itself, on the tailnet used so far), which may stay under 16 KB, and tier 3 then proves only
   that decoding works. The build-time guard against stream decodes covers the call sites; the release checklist

@@ -80,7 +80,6 @@ if any does not.
 | 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 | Guard |
 | 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 | Substitute |
 | 0005 | JSON decode (`Notifier`, LocalAPI `Client`): `decodeFromString`, not `decodeFromStream`; build.sh rejects any new stream decode | ≤23 | Substitute |
-| 0006 | retired at 1.104.5: upstream workers implement `getForegroundInfo()` | — | — |
 | 0007 | `coreLibraryDesugaring` for `java.time` | 26 | Guard |
 | 0008 | `BOOT_COMPLETED` receiver, standing in for always-on VPN | 24 | Substitute |
 | 0009 | `getActiveNetwork` in the VPN-conflict check → `getAllNetworks` below 23 | 23 | Guard |
@@ -91,7 +90,7 @@ if any does not.
 Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
 these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
 API 24 — **0008**, which adds what upstream gets from always-on VPN, and **0012**, a security
-fix for this repo's debug builds. 0006 is retired.
+fix for this repo's debug builds.
 
 Netmap disk caching is off, as upstream ships it: the native library is built with
 upstream's `GOMOBILE_BUILD_TAGS`.
@@ -156,8 +155,8 @@ adb shell am broadcast -a com.tailscale.ipn.USE_EXIT_NODE \
 > a notification.
 
 > [!CAUTION]
-> Clear an exit node in the UI, never with this broadcast minus `exitNode`: on 1.104.5 that
-> leaves a job that crashes the app at every boot (see the poison-pill gotcha below).
+> Clear an exit node in the UI, never with this broadcast minus `exitNode`: see the
+> poison-pill gotcha below.
 
 Routes only take effect once the tunnel is re-established, so reconnect afterwards:
 
@@ -236,13 +235,17 @@ see netmap, DERP, `wgcfg` and socket-binding activity. Kotlin crashes still go t
 A WorkManager job that crashes the app is persisted and re-run on **every** start, so one bad
 broadcast becomes a crash loop.
 
-- **1.98.8 without 0006** (early builds): a failed `USE_EXIT_NODE` broadcast did this through
-  expedited work. Upstream fixed that cause at 1.104.5, and 0006 is retired.
-- **1.104.5**, from a different upstream path: a `USE_EXIT_NODE` broadcast **with no
-  `exitNode`** leaves a `UseExitNodeWorker` job that never finishes. WorkManager re-runs it at
-  boot before the app has started libtailscale, and the app dies with
-  `UninitializedPropertyAccessException`. Documented, intentionally not patched (it is not
-  API-22 debt); see TESTING.md, "Known gaps".
+A `USE_EXIT_NODE` broadcast **with no `exitNode`** does this through upstream's
+`UseExitNodeWorker`, which has two bugs on any API level. Documented, intentionally not patched:
+
+- It never finishes: after its prefs edit it joins a bare `Job()` that nothing completes, so
+  WorkManager keeps the job and re-runs it at the next boot.
+- Run before the app has started libtailscale, with no exit node named, it calls the LocalAPI
+  before `Request.app` is set and the process dies (`UninitializedPropertyAccessException`).
+
+Together they crash the app at **every** later boot; on the API 22 emulator it crashed on each of
+three boots. A named exit node also hangs, but finds no netmap at the next boot and fails
+cleanly.
 
 Clear the jobs without losing the login. The `sh -c` matters: without it the device shell
 expands the glob as the shell user, which cannot list the app's files, and nothing is deleted.
