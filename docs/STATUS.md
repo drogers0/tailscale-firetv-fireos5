@@ -77,28 +77,27 @@ if any does not.
 |---|---|---|---|
 | 0001 | `NotificationChannel`, unguarded in `App.onCreate()` | 26 | Guard |
 | 0002 | `QuickToggleService : TileService`, 2 call sites; `@RequiresApi` so lint enforces the guards; manifest `tools:targetApi` | 24 | Guard |
-| 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 | Guard |
+| 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 | Substitute |
 | 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 | Substitute |
 | 0005 | JSON decode (`Notifier`, LocalAPI `Client`): `decodeFromString`, not `decodeFromStream`; build.sh rejects any new stream decode | ≤23 | Substitute |
-| 0007 | `coreLibraryDesugaring` for `java.time` | 26 | Guard |
+| 0007 | `coreLibraryDesugaring` for `java.time` | 26 | Substitute |
 | 0008 | `BOOT_COMPLETED` receiver, standing in for always-on VPN | 24 | Substitute |
-| 0009 | `getActiveNetwork` in the VPN-conflict check → `getAllNetworks` below 23 | 23 | Guard |
-| 0010 | read the initial network state in `NetworkChangeCallback.onAvailable` | 26 | Guard |
-| 0011 | `Notification.Builder(Context, String)` in `StartVPNWorker` → `NotificationCompat` | 26 | Guard |
+| 0009 | `getActiveNetwork` in the VPN-conflict check → `getAllNetworks` below 23 | 23 | Substitute |
+| 0010 | read the initial network state in `NetworkChangeCallback.onAvailable` | 26 | Substitute |
+| 0011 | `Notification.Builder(Context, String)` in `StartVPNWorker` → `NotificationCompat` | 26 | Substitute |
 | 0012 | drop the debug-only `integration.LOGIN` broadcast (exported, no permission) | — | Security fix |
 
-Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
-these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
-API 24 — **0008**, which adds what upstream gets from always-on VPN, and **0012**, a security
-fix for this repo's debug builds.
+Upstream runs at minSdk 26, so the guards and older-API fallbacks these devices need were
+dropped over time; 0001-0004, 0007 and 0009-0011 restore them. The rest are not that:
+**0005** works around a platform bug Google fixed at API 24, **0008** adds what upstream gets
+from always-on VPN, and **0012** is a security fix for this repo's debug builds.
 
 Netmap disk caching is off, as upstream ships it: the native library is built with
 upstream's `GOMOBILE_BUILD_TAGS`.
 
-An upstream race, not patched because it is not specific to API 22: a default network that
-arrives between `newBuilder()`'s read of `cachedDefaultNetwork` and `establish()` is missed, and
-the VPN keeps an empty underlying-network array until the default network changes again.
-Most likely at boot, on any API level.
+An upstream race, most likely at boot and not specific to API 22, so not patched: a default
+network that arrives between `newBuilder()`'s read of `cachedDefaultNetwork` and `establish()` is
+missed, and apps routed through the VPN see no network until the default network changes again.
 
 ### 0005 is the interesting one
 

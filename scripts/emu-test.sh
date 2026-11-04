@@ -130,7 +130,8 @@ export ANDROID_SERIAL="emulator-$PORT"
 ADB_TIMEOUT=30        # seconds per call; adb install passes its own
 adb() {
   local rc=0
-  perl -e 'alarm shift; exec @ARGV' "$ADB_TIMEOUT" "$SDK/platform-tools/adb" "$@" || rc=$?
+  perl -e '$SIG{ALRM} = "DEFAULT"; alarm shift; exec @ARGV or die "exec $ARGV[0]: $!\n"' \
+    "$ADB_TIMEOUT" "$SDK/platform-tools/adb" "$@" </dev/null || rc=$?
   [ "$rc" != 142 ] || printf 'adb %s: no answer in %ss; killed\n' "$1" "$ADB_TIMEOUT" >&2
   return "$rc"
 }

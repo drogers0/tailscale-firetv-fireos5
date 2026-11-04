@@ -7,7 +7,7 @@ index 012244f..9e4681f 100644
  
    override fun bindSocketToNetwork(fd: Int): Boolean {
 +    // Network.bindSocket(FileDescriptor) is API 23+. VpnService.protect(fd) keeps the socket
-+    // out of the tunnel instead; equivalent on a single uplink (gap in docs/STATUS.md).
++    // out of the tunnel; equivalent on a single uplink (STATUS.md, "Possible follow-ups").
 +    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
 +      val svc =
 +          IPNService.runningInstance
