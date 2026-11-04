@@ -56,8 +56,8 @@ ENCRYPTED="${TS_KEYSTORE_ENCRYPTED:-}"
 KEYCHAIN_SERVICE="tailscale-firetv-release"
 KEYCHAIN_ACCOUNT="firetv"
 
-CLEANUP_KS=""
-cleanup() { [ -n "$CLEANUP_KS" ] && rm -f "$CLEANUP_KS"; }
+CLEANUP_KS="" SIGNED=""
+cleanup() { rm -f ${CLEANUP_KS:+"$CLEANUP_KS"} ${SIGNED:+"$SIGNED" "$SIGNED.idsig"}; }
 trap cleanup EXIT
 
 # ---- resolve the passphrase -------------------------------------------------
@@ -113,6 +113,9 @@ APKSIGNER="$(ls "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}
 
 [ -n "${PASS:-}" ] || PASS="$(resolve_pass)"
 
+# Sign a copy beside the APK and replace the APK only once the copy carries the release
+# certificate, so a wrong key leaves the APK and its .sha256 untouched.
+SIGNED="$(mktemp "$(dirname "$APK")/.$(basename "$APK").XXXXXX")"
 info "Signing $(basename "$APK")"
 # env:, not pass:, so the passphrase never appears on a command line (ps, /proc).
 TS_SIGN_PASS="$PASS" "$APKSIGNER" sign \
@@ -120,14 +123,21 @@ TS_SIGN_PASS="$PASS" "$APKSIGNER" sign \
   --ks-key-alias "$ALIAS" \
   --ks-pass env:TS_SIGN_PASS \
   --key-pass env:TS_SIGN_PASS \
+  --out "$SIGNED" \
   "$APK"
 
 info "Verifying"
-certs="$("$APKSIGNER" verify --print-certs "$APK")" || die "apksigner verify failed on $APK"
+certs="$("$APKSIGNER" verify --print-certs "$SIGNED")" || die "apksigner verify failed on the signed copy of $APK"
 got="$(printf '%s\n' "$certs" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
 [ "$got" = "$CERT_SHA256" ] \
-  || die "$APK is signed with certificate ${got:-<none>}, not the release key $CERT_SHA256 (wrong keystore or alias?)"
+  || die "signing $APK produced certificate ${got:-<none>}, not the release key $CERT_SHA256 (wrong keystore or alias?); $APK is unchanged"
 printf '%s\n' "$certs" | grep -E '^Signer #1 certificate (DN|SHA-256)'
+
+chmod 644 "$SIGNED"
+rm -f "$APK.idsig"
+[ ! -f "$SIGNED.idsig" ] || mv "$SIGNED.idsig" "$APK.idsig"
+mv "$SIGNED" "$APK"
+SIGNED=""
 
 # refresh the checksum so it matches the signed bytes
 ( cd "$(dirname "$APK")" && shasum -a 256 "$(basename "$APK")" > "$(basename "$APK").sha256" )
@@ -135,8 +145,8 @@ info "sha256: $(cut -d' ' -f1 < "$APK.sha256")"
 
 cat <<EOF
 
-Signed with the durable release key. Anyone upgrading from a differently-signed build
-(including earlier debug-signed releases) must uninstall first:
+Signed with the durable release key. A device running a build signed with any other key
+(your own debug build, an official Tailscale install) must uninstall it first:
 
   adb uninstall com.tailscale.ipn
   adb install $(basename "$APK")

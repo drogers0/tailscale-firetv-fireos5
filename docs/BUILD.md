@@ -150,9 +150,13 @@ dist/tailscale-fireos5-<ver>-minsdk22-armeabi-v7a.apk.sha256
 
 Uses `TS_KEYSTORE_BASE64` / `TS_KEYSTORE_PASSWORD` / `TS_KEY_ALIAS` when set (CI), else
 `~/.keystores/tailscale-firetv-release.{jks,pass}`. See STATUS.md — note that GitHub
-secrets cannot be read back, so the local keystore must be preserved. It checks the signed
-APK's certificate against `CERT_SHA256`. Releases are signed by CI
-([RELEASING.md](RELEASING.md)).
+secrets cannot be read back, so the local keystore must be preserved. Releases are signed by
+CI ([RELEASING.md](RELEASING.md)).
+
+It signs a copy, and replaces the APK only if the copy's certificate is `CERT_SHA256`; any
+other key leaves the APK and its `.sha256` unchanged. Signing with your own key? Set
+`CERT_SHA256` in `scripts/sign-apk.sh` to your certificate's SHA-256
+(`apksigner verify --print-certs`).
 
 A later `make build` of the same version refuses to overwrite the signed APK. Move it (for
 example to a release folder), or build with `DIST=<dir>`.
