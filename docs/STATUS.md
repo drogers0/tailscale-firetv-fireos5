@@ -2,9 +2,10 @@
 
 Last updated 2026-11-03.
 
-Tailscale **1.104.5** (current stable) builds for **Fire OS 5 / Android 5.1 / API 22** with
-compatibility patches and passes tiers 0-3. Device-verified on 1.98.8, where it **routes
-traffic through an exit node**; 1.104.5 awaits the same device check.
+The Tailscale release pinned in `scripts/build.sh` (`PINNED_REF`) builds for **Fire OS 5 /
+Android 5.1 / API 22** with compatibility patches and passes tiers 0-3. Device-verified on
+1.98.8, where it **routes traffic through an exit node**; 1.104.5 awaits the same device
+check.
 
 ---
 
@@ -183,7 +184,10 @@ the same commit produce APKs that cannot upgrade over one another.
 A later build of the same version refuses to overwrite the signed APK; move it to a release
 folder first, or build with `DIST=<dir>` (see BUILD.md, "Signing").
 
-Signer: `CN=tailscale-firetv-fireos5`, SHA-256 `b6e56d68…53b5`.
+Releases are signed in CI by `.github/workflows/release.yml`; see [RELEASING.md](RELEASING.md).
+
+Signer: `CN=tailscale-firetv-fireos5`, SHA-256 `b6e56d68…53b5`, pinned in full as `CERT_SHA256`
+in `scripts/sign-apk.sh`, which refuses any other key.
 
 The signing key is **deliberately not in this repo.** A public repo would expose the
 encrypted blob to indefinite offline attack, and a signing key is a one-way door — once

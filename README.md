@@ -4,7 +4,8 @@ Unofficial, reproducible build of the **Tailscale Android client** for **Fire OS
 Android 5.1 (API 22)** devices with **OpenGL ES 2.0** GPUs — hardware the official app
 cannot support.
 
-Current stable **Tailscale 1.104.5**, patched to run at API 22.
+Tracks Tailscale's current stable release, patched to run at API 22. Each
+[release](../../releases) names the upstream version it carries.
 
 > [!IMPORTANT]
 > **Unofficial community build.** Not affiliated with, endorsed by, or supported by
@@ -36,8 +37,10 @@ adb install -r dist/tailscale-fireos5-*.apk
 ```
 
 > [!TIP]
-> Prefer not to build? Take an APK from [Releases](../../releases) and check its `sha256`
-> against the published checksum.
+> Prefer not to build? Download the APK from the [latest release](../../releases/latest) and
+> check it against the `.sha256` beside it. CI builds and signs each release from a tagged
+> commit on `main`, and each one is checked on a Fire TV Stick before it is published
+> ([docs/RELEASING.md](docs/RELEASING.md)).
 
 ## Documentation
 
@@ -46,6 +49,7 @@ adb install -r dist/tailscale-fireos5-*.apk
 | [docs/STATUS.md](docs/STATUS.md) | what works, patches, verification method, gotchas |
 | [docs/BUILD.md](docs/BUILD.md) | prerequisites, build, troubleshooting, reproducibility |
 | [docs/TESTING.md](docs/TESTING.md) | test tiers, running them locally and in CI, the release checklist |
+| [docs/RELEASING.md](docs/RELEASING.md) | how upstream releases become bump PRs and signed draft releases |
 | [docs/DEVICES.md](docs/DEVICES.md) | which hardware this is for — every Fire TV and Fire tablet model, plus non-Amazon devices |
 | [docs/BACKGROUND.md](docs/BACKGROUND.md) | why the gap exists, why track current stable |
 | [docs/FINDINGS.md](docs/FINDINGS.md) | investigation record, including disproven theories |
@@ -61,8 +65,10 @@ mistaken for an official distribution. **Do not report problems with these build
 Tailscale** — open an issue here.
 
 > [!CAUTION]
-> APKs are **debug-signed** and share the upstream application ID `com.tailscale.ipn`, so
-> they cannot be installed alongside an official Tailscale build.
+> Release APKs are debug builds re-signed with this project's release key, and they share the
+> upstream application ID `com.tailscale.ipn`, so they cannot be installed alongside an
+> official Tailscale build. An APK you build yourself carries your own debug key: uninstall a
+> release before installing it.
 
 Build scripts here are MIT licensed ([LICENSE](LICENSE)) — that covers the scripts only,
 not the Tailscale source they compile.
