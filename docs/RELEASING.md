@@ -58,8 +58,10 @@ How the bot manages the PR:
   - **Any other error:** just re-run the failed job, `gh run rerun <run-id> --failed`. Do not
     delete the branch: the PR may already carry the new version.
 - **The `ts_ref` input** of a manual run is a test hook. It bypasses the downgrade guard and
-  proposes the given release as the bump, even an older one. Without it, only a run on `main`
-  touches the bump PR or the drift issue; a run from a feature branch only tests the release.
+  proposes the given release as the bump, even an older one, from the branch the run is on: it
+  pushes that branch plus the bump to `bot/upstream-bump`, so it opens, updates or closes the
+  real bump PR. Use it only when no real bump PR is open. The drift issue changes only on a run
+  from `main` without it; a run from another branch without it only tests the release.
 
 **Fail:** the `upstream-drift` issue opens, or gets a comment when a newer release fails. It
 closes once a later release passes, or once `main` pins the release or a newer one.

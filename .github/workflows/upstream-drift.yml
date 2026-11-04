@@ -65,11 +65,11 @@ jobs:
       ts_ref: ${{ needs.resolve.outputs.ts_ref }}
   report:
     needs: [resolve, tiers]
-    # Like bump, only from main or the ts_ref test hook: a feature-branch run must not open or
-    # close the drift issue on the strength of that branch's PINNED_REF.
+    # Only runs on main without ts_ref (the schedule or a plain dispatch): a feature-branch or test
+    # run must not open or close the drift issue on the strength of a branch's pin or a test release.
     if: >-
       !cancelled() && needs.resolve.outputs.skip != 'true' &&
-      (github.ref == 'refs/heads/main' || inputs.ts_ref != '')
+      github.ref == 'refs/heads/main' && inputs.ts_ref == ''
     concurrency: { group: upstream-drift-report }   # overlapping runs must not both create an issue
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -123,7 +123,7 @@ jobs:
     # own (its pull_request runs wait for approval), so this job dispatches ci.yml on the
     # branch, which produces the required checks on its head commit (docs/RELEASING.md).
     # Only from main, so a run dispatched from another branch cannot propose that branch's commits;
-    # the ts_ref test hook (throwaway test PRs, docs/RELEASING.md) may run from any branch.
+    # the ts_ref test hook (docs/RELEASING.md) may run from any branch.
     needs: [resolve, tiers]
     if: >-
       !cancelled() && needs.resolve.result == 'success' && needs.resolve.outputs.skip == 'false' &&
