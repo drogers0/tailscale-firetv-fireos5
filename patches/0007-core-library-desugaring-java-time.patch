@@ -1,0 +1,24 @@
+diff --git a/android/build.gradle.kts b/android/build.gradle.kts
+index f166454..3b93675 100644
+--- a/android/build.gradle.kts
++++ b/android/build.gradle.kts
+@@ -37,6 +37,10 @@ android {
+   }
+ 
+   compileOptions {
++    // java.time (Duration/Instant/DateTimeFormatter) is API 26 on Android and is used
++    // throughout TimeUtil, MainViewModel and the key-expiry notifications. Desugaring
++    // backports it rather than patching every call site.
++    isCoreLibraryDesugaringEnabled = true
+     sourceCompatibility = JavaVersion.VERSION_17
+     targetCompatibility = JavaVersion.VERSION_17
+   }
+@@ -68,6 +72,8 @@ android {
+ }
+ 
+ dependencies {
++  coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
++
+   // Android dependencies.
+   implementation(libs.androidx.fragment)
+   implementation(libs.androidx.core)

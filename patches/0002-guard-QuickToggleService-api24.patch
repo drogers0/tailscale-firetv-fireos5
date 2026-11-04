@@ -1,8 +1,24 @@
+diff --git a/android/src/main/AndroidManifest.xml b/android/src/main/AndroidManifest.xml
+index 97ecc92..aedec9e 100644
+--- a/android/src/main/AndroidManifest.xml
++++ b/android/src/main/AndroidManifest.xml
+@@ -133,9 +133,11 @@
+             android:name="androidx.work.impl.foreground.SystemForegroundService"
+             android:foregroundServiceType="systemExempted"
+             tools:node="merge" />
++        <!-- TileService is API 24+; the system never binds this below that. -->
+         <service
+             android:name=".QuickToggleService"
+             android:exported="true"
++            tools:targetApi="n"
+             android:icon="@drawable/ic_tile"
+             android:label="@string/tile_name"
+             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
 diff --git a/android/src/main/java/com/tailscale/ipn/App.kt b/android/src/main/java/com/tailscale/ipn/App.kt
-index 11e8b4d..5a8bb56 100644
+index 7199d20..762d087 100644
 --- a/android/src/main/java/com/tailscale/ipn/App.kt
 +++ b/android/src/main/java/com/tailscale/ipn/App.kt
-@@ -197,7 +197,10 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
+@@ -213,7 +213,10 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
                }
                val vpnRunning = state == Ipn.State.Starting || state == Ipn.State.Running
                updateConnStatus(ableToStartVPN)
@@ -14,7 +30,7 @@ index 11e8b4d..5a8bb56 100644
                // Update notification status when VPN is running
                if (vpnRunning) {
                  notifyStatus(
-@@ -289,7 +292,13 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
+@@ -328,7 +331,13 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
     */
    private fun updateConnStatus(ableToStartVPN: Boolean) {
      setAbleToStartVPN(ableToStartVPN)
@@ -30,7 +46,7 @@ index 11e8b4d..5a8bb56 100644
    }
  
 diff --git a/android/src/main/java/com/tailscale/ipn/QuickToggleService.java b/android/src/main/java/com/tailscale/ipn/QuickToggleService.java
-index a8053a4..b31166f 100644
+index 9e71474..0539a0f 100644
 --- a/android/src/main/java/com/tailscale/ipn/QuickToggleService.java
 +++ b/android/src/main/java/com/tailscale/ipn/QuickToggleService.java
 @@ -9,6 +9,11 @@ import android.os.Build;

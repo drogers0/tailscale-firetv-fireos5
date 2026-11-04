@@ -1,15 +1,16 @@
 # Status — WORKING
 
-Last updated 2026-11-02.
+Last updated 2026-11-03.
 
-Tailscale **1.98.8** (current stable) runs on **Fire OS 5 / Android 5.1 / API 22** with
-compatibility patches, and **routes traffic through an exit node**.
+Tailscale **1.104.5** (current stable) builds for **Fire OS 5 / Android 5.1 / API 22** with
+compatibility patches and passes tiers 0-3. Device-verified on 1.98.8, where it **routes
+traffic through an exit node**; 1.104.5 awaits the same device check.
 
 ---
 
 ## Verified end-to-end
 
-On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
+On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0), running 1.98.8:
 
 | | |
 |---|---|
@@ -30,12 +31,14 @@ On a Fire TV Stick 2nd gen (`AFTT`, Fire OS 5.2.9.5, Mali-450 / GLES 2.0):
 > **Measuring exit-node routing:** public egress IP is an unreliable check — if the exit
 > node sits behind the same internet connection, both ends report the same address. Use the
 > tunnel byte counters instead. Without an exit node selected, public-internet traffic never
-> traverses `tun0` at all.
+> traverses the tunnel at all. The tunnel is the `UP` `tunN` with a `100.x` address; it can be
+> `tun1` after a reconnect, so look it up first:
 >
 > ```sh
-> adb shell cat /sys/class/net/tun0/statistics/rx_bytes
+> t=$(adb shell netcfg | awk '$1 ~ /^tun[0-9]+$/ && $2 == "UP" && $3 ~ /^100\./ {print $1; exit}')
+> adb shell cat /sys/class/net/$t/statistics/rx_bytes
 > adb shell curl -s -o /dev/null -w '%{size_download}\n' http://speedtest.tele2.net/1MB.zip
-> adb shell cat /sys/class/net/tun0/statistics/rx_bytes
+> adb shell cat /sys/class/net/$t/statistics/rx_bytes
 > ```
 
 ## Reboot behaviour
@@ -62,7 +65,7 @@ check is on the release checklist.
 ## Build
 
 ```sh
-TS_REF=1.98.8-t1241b225b-gbcbaf1889 MIN_SDK=22 ./scripts/build.sh
+make build          # the pinned TS_REF, at MIN_SDK=22
 ```
 
 ~12 s incremental, a few minutes cold. Patches apply automatically; the build hard-fails
@@ -70,23 +73,31 @@ if any does not.
 
 ## Patches
 
-| # | Fixes | API |
-|---|---|---|
-| 0001 | `NotificationChannel`, unguarded in `App.onCreate()` | 26 |
-| 0002 | `QuickToggleService : TileService`, 2 call sites; `@RequiresApi` so lint enforces the guards | 24 |
-| 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 |
-| 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 |
-| 0005 | netmap decode: `decodeFromString`, not `decodeFromStream` | ≤23 |
-| 0006 | drop `setExpedited` from `IPNReceiver` work requests | 31 |
-| 0007 | `coreLibraryDesugaring` for `java.time` | 26 |
-| 0008 | `BOOT_COMPLETED` receiver, standing in for always-on VPN | 24 |
-| 0009 | `getActiveNetwork` in the VPN-conflict check → `getAllNetworks` below 23 | 23 |
-| 0010 | read the initial network state in `NetworkChangeCallback.onAvailable` | 26 |
-| 0011 | `Notification.Builder(Context, String)` in `StartVPNWorker` → `NotificationCompat` | 26 |
+| # | Fixes | API | Rule |
+|---|---|---|---|
+| 0001 | `NotificationChannel`, unguarded in `App.onCreate()` | 26 | Guard |
+| 0002 | `QuickToggleService : TileService`, 2 call sites; `@RequiresApi` so lint enforces the guards; manifest `tools:targetApi` | 24 | Guard |
+| 0003 | `getForegroundService` / `startForegroundService`, 2 sites | 26 | Substitute |
+| 0004 | `Network.bindSocket` → `VpnService.protect(fd)` | 23 | Substitute |
+| 0005 | JSON decode (`Notifier`, LocalAPI `Client`): `decodeFromString`, not `decodeFromStream`; build.sh rejects any new stream decode | ≤23 | Substitute |
+| 0007 | `coreLibraryDesugaring` for `java.time` | 26 | Substitute |
+| 0008 | `BOOT_COMPLETED` receiver, standing in for always-on VPN | 24 | Substitute |
+| 0009 | `getActiveNetwork` in the VPN-conflict check → `getAllNetworks` below 23 | 23 | Substitute |
+| 0010 | read the initial network state in `NetworkChangeCallback.onAvailable` | 26 | Substitute |
+| 0011 | `Notification.Builder(Context, String)` in `StartVPNWorker` → `NotificationCompat` | 26 | Substitute |
+| 0012 | drop the debug-only `integration.LOGIN` broadcast (exported, no permission) | — | Security fix |
 
-Upstream runs at minSdk 26, so guards that became dead code were dropped over time. All of
-these are that, **except 0005** — not a missing guard, but a platform bug Google fixed at
-API 24 — and **0008**, which adds what upstream gets from always-on VPN.
+Upstream runs at minSdk 26, so the guards and older-API fallbacks these devices need were
+dropped over time; 0001-0004, 0007 and 0009-0011 restore them. The rest are not that:
+**0005** works around a platform bug Google fixed at API 24, **0008** adds what upstream gets
+from always-on VPN, and **0012** is a security fix for this repo's debug builds.
+
+Netmap disk caching is off, as upstream ships it: the native library is built with
+upstream's `GOMOBILE_BUILD_TAGS`.
+
+An upstream race, most likely at boot and not specific to API 22, so not patched: a default
+network that arrives between `newBuilder()`'s read of `cachedDefaultNetwork` and `establish()` is
+missed, and apps routed through the VPN see no network until the default network changes again.
 
 ### 0005 is the interesting one
 
@@ -108,6 +119,11 @@ matter, and the offsets in the message vary between runs. Only the netmap notifi
 that large (28 KB here); State and Prefs are small and always decoded fine, so **peers
 silently never arrived while everything else worked**. The exception escaped the Go
 callback and the entire notification was dropped, with no error anywhere.
+
+From 1.104.5 the peer list arrives as deltas. `InitialStatus` comes before the backend is
+`Running` and carries no peers; the first `PeersChanged` update carries every peer and is the
+notification that can cross 16 KB on a large tailnet. Upstream now catches a failed decode
+and logs `failed to process IPN notification`.
 
 Upstream never meets this — it ships minSdk 26, above the API 24 fix. kotlinx.serialization
 became exposed only in 1.5.0, when `CharsetReader` was added as an optimization; Tailscale
@@ -137,6 +153,10 @@ adb shell am broadcast -a com.tailscale.ipn.USE_EXIT_NODE \
 > node that is the full FQDN, not the short hostname. A mismatch fails silently apart from
 > a notification.
 
+> [!CAUTION]
+> Clear an exit node in the UI, never with this broadcast minus `exitNode`: see the
+> poison-pill gotcha below.
+
 Routes only take effect once the tunnel is re-established, so reconnect afterwards:
 
 ```sh
@@ -144,9 +164,9 @@ adb shell am broadcast -a com.tailscale.ipn.DISCONNECT_VPN -n com.tailscale.ipn/
 adb shell am broadcast -a com.tailscale.ipn.CONNECT_VPN    -n com.tailscale.ipn/.IPNReceiver
 ```
 
-Confirm with `ip route show table <vpn table>` — expect ~46 `tun0` routes splitting
-`0.0.0.0/0` (`0.0.0.0/5`, `8.0.0.0/7`, `32.0.0.0/3`, `64.0.0.0/2`, …) with the local LAN
-carved out when `allowLanAccess=true`. The table number changes between installs; find it
+Confirm with `ip route show table <vpn table>` — expect ~46 routes on the tunnel's `tunN`
+splitting `0.0.0.0/0` (`0.0.0.0/5`, `8.0.0.0/7`, `32.0.0.0/3`, `64.0.0.0/2`, …) with the local
+LAN carved out when `allowLanAccess=true`. The table number changes between installs; find it
 via `ip rule`.
 
 ## Signing
@@ -211,14 +231,33 @@ see netmap, DERP, `wgcfg` and socket-binding activity. Kotlin crashes still go t
 
 ## Gotcha: poison-pill work items
 
-A failed `USE_EXIT_NODE` broadcast (pre-0006) persists a WorkManager job that crashes the
-app on **every** start. Clear it without losing the login:
+A WorkManager job that crashes the app is persisted and re-run on **every** start, so one bad
+broadcast becomes a crash loop.
+
+A `USE_EXIT_NODE` broadcast **with no `exitNode`** does this through upstream's
+`UseExitNodeWorker`, which has two bugs on any API level. Documented, intentionally not patched:
+
+- It never finishes: after its prefs edit it joins a bare `Job()` that nothing completes, so
+  WorkManager keeps the job and re-runs it at the next boot.
+- Run before the app has started libtailscale, with no exit node named, it calls the LocalAPI
+  before `Request.app` is set and the process dies (`UninitializedPropertyAccessException`).
+
+Together they crash the app at **every** later boot; on the API 22 emulator it crashed on each of
+three boots. A named exit node also hangs, but finds no netmap at the next boot and fails
+cleanly.
+
+Clear the jobs without losing the login. The `sh -c` matters: without it the device shell
+expands the glob as the shell user, which cannot list the app's files, and nothing is deleted.
 
 ```sh
-adb shell run-as com.tailscale.ipn rm -f databases/androidx.work.workdb*
+adb shell am force-stop com.tailscale.ipn
+adb shell "run-as com.tailscale.ipn sh -c 'rm -f databases/androidx.work.workdb*'"
 ```
 
-`files/profile-data` holds the login and is untouched.
+`files/profile-data` holds the login and is untouched. Verified on the API 22 emulator: after
+three crashing boots, two clean ones. Clearing the app's data (`adb shell pm clear
+com.tailscale.ipn`) or uninstalling also removes the jobs, but logs out; an `adb install -r`
+over the top keeps them.
 
 ## Device under test
 

@@ -8,7 +8,7 @@ end needs hardware.
 
 | Tier | What it catches | Runs | Command |
 |---|---|---|---|
-| 0 | a patch that no longer applies, shellcheck warnings, `verify-apk` regressions | every PR, pushes to `main`, weekly upstream drift | `make check` |
+| 0 | a patch that no longer applies, shellcheck warnings, `verify-apk` regressions, stale toolchain pins, a stream JSON decode left in the patched tree | every PR, pushes to `main`, weekly upstream drift | `make check` |
 | 1 | build breaks, `NewApi` calls above API 22 (Android Lint), upstream unit tests | every PR, pushes to `main`, weekly upstream drift | `LINT=1 SKIP_TESTS=0 make build` |
 | 2 | API 22 runtime failures of each patch on an emulator, with no tailnet | PRs to `main`, pushes to `main` | `make build-emu emu-test` |
 | 3 | the same emulator logged in to a real tailnet: tunnel, peers, reboots, network changes | by hand, locally | `make build-emu emu-test-net` |
@@ -25,26 +25,40 @@ and keeps its logs in `.build/emu-test/`.
 | Patch | Tier | Check |
 |---|---|---|
 | 0007 | 2 | desugared `j$.time` classes are in the dex |
-| 0011, 0006 | 2 | `CONNECT_VPN` before any launch (logged out, no consent) runs `StartVPNWorker` and posts the "open Tailscale" notification |
+| 0011 | 2 | `CONNECT_VPN` before any launch (logged out, no consent) runs `StartVPNWorker` as expedited work in WorkManager's foreground service and posts the "open Tailscale" notification |
 | 0002, 0010 | 2 | launch with no missing-API error; a default network is picked at startup |
 | 0009 | 2 | denying VPN consent shows "VPN permission needed", with no crash |
 | 0010 | 2 | mobile data off and on moves the default network |
 | 0001, 0003 | 2 | `IPNService` runs in the foreground |
 | 0008 | 2 | a reboot while logged out: `BootReceiver` stays disconnected, no tunnel |
-| (login) | 3 | an auth key logs in; state `Running`; `tun0` has a tailnet address |
+| (login) | 3 | an auth key logs in; state `Running`; a `tun` interface has a tailnet address |
 | 0004 | 3 | sockets are protected (`VpnService.protect(fd=…) -> true`, never `false`); the host pings the emulator and the emulator pings the host |
-| 0005 | 3 | the netmap decodes: the emulator's own address is in its peer list |
+| 0005 | 3 | the first `PeersChanged` update, which carries every peer, decodes (the debug build logs it), and the emulator's own address is in its peer list |
 | 0007 | 3 | a node's details show a formatted key expiry (`java.time` at runtime) |
 | 0010 | 3 | mobile data off and on while connected: a new default network, the tunnel still works |
 | 0008 | 3 | a reboot while connected brings the tunnel back without opening the app; a disconnect followed by a reboot stays down |
 
-Every wait also fails fast on a crash, a native fatal signal, a failed worker or a
-`NoSuchMethodError` / `NoClassDefFoundError` / `VerifyError` in the app's log.
+Every wait also fails fast on a crash, a native fatal signal, a failed worker, a dropped IPN
+notification or a `NoSuchMethodError` / `NoClassDefFoundError` / `VerifyError` in the app's log.
+Every adb call is bounded (30 s; `adb install` 300 s), so a hung `adb shell` cannot outlast a
+wait's deadline.
 
 Known gaps:
 - **0007** at tier 2 is static, because its `java.time` calls need a netmap. Tier 3 runs them by
   opening the details of a node whose key expires; tagged nodes, like the emulator, never expire.
 - **0009** relies on a fresh install having no VPN consent, rather than revoking it.
+- **No tier sends `USE_EXIT_NODE`:** an upstream bug; see STATUS, "Gotcha: poison-pill work items".
+- **0005 at tier 3.** The first `PeersChanged` update carries every peer (12, plus the node
+  itself, on the tailnet used so far), which may stay under 16 KB, and tier 3 then proves only
+  that decoding works. The build-time guard against stream decodes covers the call sites; the release checklist
+  covers a large payload on hardware.
+- **NewApi lint is blind inside `@RequiresApi(TIRAMISU)` functions** (upstream's
+  `MainActivity.onCreate` and `SearchView`): lint treats their bodies as running at API 33.
+  `onCreate` is called only by the system, so none of its body (all of `setContent`) is linted.
+  - Audit at 1.104.5: the only new `onCreate` code is the deep-link wiring, which is linted
+    where it is defined. `SearchView`'s API-33 `OnBackInvokedCallback` is reachable only behind
+    `MainView.kt`'s `SDK_INT >= TIRAMISU` gate.
+  - Tier 2 launches `MainActivity` and is the backstop. Re-check both on every rebase.
 
 ## Tier 3
 
@@ -82,14 +96,23 @@ given an auth key through MDM. Use a short-expiry key if that matters to you.
 On a Fire TV Stick (Fire OS 5):
 
 - [ ] `scripts/device-check.sh` reports API 22 and GLES 2.0.
-- [ ] The release APK installs, and the armeabi-v7a native library loads: no
-      `UnsatisfiedLinkError`, no `SIGABRT` at start.
+- [ ] The release APK installs (uninstall first if the signer differs), and the armeabi-v7a
+      native library loads: no `UnsatisfiedLinkError`, no `SIGABRT` at start.
 - [ ] The UI renders and navigates on Mali-450 / GLES 2.0 with the remote's D-pad, and `logcat`
       has no `glerror`. The app appears in the Amazon launcher.
 - [ ] No Google Play services prompts or errors in `logcat` at start-up and login.
-- [ ] Log in; `tun0` is up; peers are listed; the stick is reachable from another device.
-- [ ] A reboot while connected brings the tunnel back (0008) on Fire OS.
-- [ ] Exit-node traffic shows on the `tun0` counters (see the tip in
+- [ ] Log in; the tunnel is up (find its `tunN` as in the
+      [STATUS tip](STATUS.md#verified-end-to-end)); peers are listed; the stick is reachable
+      from another device.
+- [ ] The tunnel stays up for at least 30 minutes.
+- [ ] Exit-node traffic shows on the tunnel's counters (see the tip in
       [STATUS.md](STATUS.md#verified-end-to-end)).
+- [ ] A reboot while connected brings the tunnel back (0008) on Fire OS, and other apps still
+      see a network: Settings › Network or a streaming app shows connected. If only that fails
+      and Wi-Fi off/on fixes it, reboot again: once is upstream's boot race (STATUS, "Patches");
+      every time blocks the release, because 0008 then leaves apps offline after every boot.
+- [ ] A disconnect followed by a reboot stays down.
+- [ ] `logcat` has no `failed to process IPN notification` and no `Bad position` (0005 on a
+      real tailnet's peer list).
 
 Everything else is covered by tiers 0-3.

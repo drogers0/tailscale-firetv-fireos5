@@ -1,6 +1,6 @@
 // Gradle init script used by scripts/build.sh when LINT=1. Restricts Android Lint to NewApi,
-// so only API-floor regressions fail, without editing upstream's build.gradle.
-// TS_LINT_CONFIG, when set, points at the patch series' commented ignore file.
+// so only API-floor regressions fail, without editing upstream's build.gradle.kts.
+// TS_LINT_CONFIG points at patches/lint.xml, the commented ignore file; build.sh always sets it.
 allprojects {
     plugins.withId('com.android.application') {
         androidComponents {
@@ -8,8 +8,7 @@ allprojects {
                 android.lint {
                     checkOnly.clear()
                     checkOnly.add('NewApi')
-                    def cfg = System.getenv('TS_LINT_CONFIG')
-                    if (cfg) lintConfig = new File(cfg)
+                    lintConfig = new File(System.getenv('TS_LINT_CONFIG'))
                 }
             }
         }

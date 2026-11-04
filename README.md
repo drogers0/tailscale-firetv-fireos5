@@ -4,8 +4,7 @@ Unofficial, reproducible build of the **Tailscale Android client** for **Fire OS
 Android 5.1 (API 22)** devices with **OpenGL ES 2.0** GPUs — hardware the official app
 cannot support.
 
-Current stable **Tailscale 1.98.8**, patched to run at API 22, **routing traffic through an
-exit node**.
+Current stable **Tailscale 1.104.5**, patched to run at API 22.
 
 > [!IMPORTANT]
 > **Unofficial community build.** Not affiliated with, endorsed by, or supported by
@@ -13,7 +12,8 @@ exit node**.
 
 ## Status — working
 
-Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5:
+Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5, on 1.98.8; 1.104.5 passes tiers
+0-3 and awaits the same device check.
 
 | | |
 |---|---|
@@ -47,7 +47,7 @@ adb install -r dist/tailscale-fireos5-*.apk
 | [docs/BUILD.md](docs/BUILD.md) | prerequisites, build, troubleshooting, reproducibility |
 | [docs/TESTING.md](docs/TESTING.md) | test tiers, running them locally and in CI, the release checklist |
 | [docs/DEVICES.md](docs/DEVICES.md) | which hardware this is for — every Fire TV and Fire tablet model, plus non-Amazon devices |
-| [docs/BACKGROUND.md](docs/BACKGROUND.md) | why the gap exists, why 1.98.8 |
+| [docs/BACKGROUND.md](docs/BACKGROUND.md) | why the gap exists, why track current stable |
 | [docs/FINDINGS.md](docs/FINDINGS.md) | investigation record, including disproven theories |
 
 ## Legal

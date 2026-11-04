@@ -11,26 +11,20 @@ jobs:
     timeout-minutes: 5
     outputs:
       ts_ref: ${{ steps.r.outputs.ts_ref }}
-      patch_series: ${{ steps.r.outputs.patch_series }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
       - id: r
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           # Assign first: a failing $(...) inside echo would not trip -e, and an empty ref
           # would silently test the pinned ref and close a real drift issue.
           ref="$(gh release view --repo tailscale/tailscale-android --json tagName --jq .tagName)"
-          series="$(cd patches && printf '%s\n' [0-9]*/ | tr -d / | grep -E '^[0-9]+(\.[0-9]+)+$' | sort -V | tail -1)"
           [ -n "$ref" ] || { echo "::error::no upstream release tag resolved"; exit 1; }
-          [ -n "$series" ] && [ -d "patches/$series" ] || { echo "::error::no patch series under patches/"; exit 1; }
-          { echo "ts_ref=$ref"; echo "patch_series=$series"; } >> "$GITHUB_OUTPUT"
+          echo "ts_ref=$ref" >> "$GITHUB_OUTPUT"
   tiers:
     needs: resolve
     uses: ./.github/workflows/ci.yml
     with:
       ts_ref: ${{ needs.resolve.outputs.ts_ref }}
-      patch_series: ${{ needs.resolve.outputs.patch_series }}
   report:
     needs: [resolve, tiers]
     if: ${{ !cancelled() }}
@@ -44,7 +38,6 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RESULT: ${{ needs.tiers.result }}
           TS_REF: ${{ needs.resolve.outputs.ts_ref }}
-          SERIES: ${{ needs.resolve.outputs.patch_series }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -56,13 +49,13 @@ jobs:
             [ -z "$num" ] || gh issue close "$num" --comment "Tiers 0+1 pass again against \`$TS_REF\`: $RUN_URL"
             exit 0
           fi
-          key="upstream \`${TS_REF:-unresolved}\` with \`patches/${SERIES:-?}\`"
+          key="upstream \`${TS_REF:-unresolved}\`"
           body="Tiers 0+1 failed against $key (see the run for the failing stage): $RUN_URL"
           if [ -z "$num" ]; then
             gh issue create --title "Upstream drift: latest release fails tiers 0+1" --label "$label" --body "$body"
             exit 0
           fi
-          # Same ref and series as the last bot report: stay quiet. Human comments are ignored.
+          # Same ref as the last bot report: stay quiet. Human comments are ignored.
           last="$(gh issue view "$num" --json body,comments \
             --jq '([.body] + [.comments[] | select(.author.login == "github-actions") | .body]) | last')"
           case "$last" in *"$key"*) exit 0 ;; esac

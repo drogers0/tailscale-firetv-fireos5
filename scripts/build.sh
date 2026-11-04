@@ -2,42 +2,43 @@
 #
 # Build Tailscale for Fire OS 5 / Android 5.1 (API 22) on OpenGL ES 2.0 hardware.
 #
-# Upstream declares minSdkVersion 26 from 2024-03-13 onward, but that bump was a one-line
+# Upstream declares minSdk 26 from 2024-03-13 onward, but that bump was a one-line
 # decision, not a dependency change (see docs/FINDINGS.md). This script checks out a
 # chosen upstream ref and overrides the API floor in both places it is enforced:
 #
-#   1. android/build.gradle   -> minSdkVersion
-#   2. gomobile bind          -> -androidapi   (the native AAR has its own gate)
+#   1. android/build.gradle.kts -> minSdk
+#   2. gomobile bind            -> -androidapi   (the native AAR has its own gate)
 #
 # Overriding only the first produces an APK that installs and then dies in native code.
 #
 # Usage: ./scripts/build.sh [--patch-only]
-#   --patch-only  fetch TS_REF, apply its patch series, then stop. Needs only git (tier 0).
+#   --patch-only  fetch TS_REF, apply the patch series, then stop. Needs only git (tier 0).
 #
-# See docs/BUILD.md for prerequisites and TS_REF choices.
+# See docs/BUILD.md for prerequisites and the patch series.
 
 set -euo pipefail
 
 # ---- pinned inputs ----------------------------------------------------------
 TS_REPO="https://github.com/tailscale/tailscale-android.git"
-# Match the documented release and the available API-22 patch series.
-TS_REF="${TS_REF:-1.98.8-t1241b225b-gbcbaf1889}"
-# SDK packages, the NDK included; CI keys its SDK cache on these four NAME= lines
-# (.github/actions/setup-build).
-NDK_VERSION="${NDK_VERSION:-23.1.7779620}"
+# The release the patch series in patches/ is for.
+TS_REF="${TS_REF:-1.104.5-t788384763-gd8673104f}"
+# Toolchain. Each pin except CMDLINE_TOOLS must equal what TS_REF declares; the build
+# checks that right after the checkout. CI keys its SDK cache on the four SDK package
+# NAME= lines (.github/actions/setup-build). Keep each pin a bare NAME=value (no quotes or
+# trailing comment): CI and the docs read these lines with sed.
+JDK=21
+NDK_VERSION=23.1.7779620
 CMDLINE_TOOLS=9477386
-SDK_PLATFORM=android-34
-BUILD_TOOLS=34.0.0
+SDK_PLATFORM=android-36
+BUILD_TOOLS=36.0.0
 
 # ---- tunables ---------------------------------------------------------------
 MIN_SDK="${MIN_SDK:-22}"           # device API level
-TS_ARCH="${TS_ARCH:-arm}"          # legacy gogio recipe only; empty = every ABI
-GOMOBILE_TARGET="${GOMOBILE_TARGET:-android/arm}"   # modern recipe; arm = armeabi-v7a
+GOMOBILE_TARGET="${GOMOBILE_TARGET:-android/arm}"   # arm = armeabi-v7a
 WORKDIR="${WORKDIR:-.build}"
 DIST="${DIST:-dist}"               # APK output dir; relative paths are from the repo root
 SKIP_TESTS="${SKIP_TESTS:-1}"
 GRADLE_HEAP="${GRADLE_HEAP:-6g}"
-PATCH_SERIES="${PATCH_SERIES:-}"   # dir under patches/; default: patches/$TS_REF, then patches/<version>
 LINT="${LINT:-0}"                  # 1 = also run Android Lint, NewApi only (scripts/lint-newapi.gradle)
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -46,7 +47,6 @@ case "$DIST" in /*) ;; *) DIST="$REPO_ROOT/$DIST" ;; esac
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
-warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 java_major() { "$1/bin/java" -version 2>&1 | sed -nE 's/.* version "([0-9]+).*/\1/p' | head -1; }
 
@@ -57,7 +57,7 @@ case "${1:-}" in
   *) die "usage: $0 [--patch-only]" ;;
 esac
 
-# gomobile/gogio arch name -> Android ABI directory name. Used for the artifact
+# gomobile arch name -> Android ABI directory name. Used for the artifact
 # filename and for the ABI assertion in the verify step, so both follow what was built.
 abi_for() {
   case "$1" in
@@ -70,18 +70,12 @@ abi_for() {
 }
 
 # ---- 1. patch series --------------------------------------------------------
-# Resolved before any fetch, so a bad or missing series fails at once.
+# One series, patches/*.patch, for TS_REF: every ref this script supports needs it, so an
+# empty one is fatal. Checked before any fetch.
 info "Build  (ref=$TS_REF  minSdk=$MIN_SDK)"
-if [ -n "$PATCH_SERIES" ]; then
-  PATCHDIR="$REPO_ROOT/patches/$PATCH_SERIES"
-  [ -d "$PATCHDIR" ] || die "no patch series patches/$PATCH_SERIES"
-else
-  PATCHDIR="$REPO_ROOT/patches/$TS_REF"
-  [ -d "$PATCHDIR" ] || PATCHDIR="$REPO_ROOT/patches/${TS_REF%%-*}"
-fi
-if [ "$PATCH_ONLY" = 1 ] && [ ! -d "$PATCHDIR" ]; then
-  die "no patch series for $TS_REF; nothing to check"
-fi
+PATCHDIR="$REPO_ROOT/patches"
+PATCHES=("$PATCHDIR"/*.patch)
+[ -e "${PATCHES[0]}" ] || die "no patches/*.patch"
 
 # ---- 2. checkout ------------------------------------------------------------
 command -v git >/dev/null || die "git not found"
@@ -104,47 +98,65 @@ info "HEAD: $(git -C "$SRC" rev-parse HEAD)"
 git -C "$SRC" checkout -q -- . 2>/dev/null || true
 git -C "$SRC" clean -fdq -e .gobin
 
-# ---- 3. per-ref patches -----------------------------------------------------
+# The pins must match what upstream declares; a mismatch otherwise surfaces deep in Gradle
+# as an SDK download or a daemon-JVM provisioning error. Checked in --patch-only too, so
+# tier 0 reports a toolchain bump the moment upstream makes one, with every new value at once.
+STALE=()
+pin() {   # pin NAME PINNED FILE SED_SCRIPT: SED_SCRIPT prints the value upstream declares
+  local up
+  up="$(sed -nE "$4" "$SRC/android/$3" 2>/dev/null | head -1)" || true
+  [ -n "$up" ] || die "$TS_REF: cannot read $1 from android/$3; upstream changed its build layout"
+  [ "$up" = "$2" ] || STALE+=("$1=$up")
+}
+pin JDK          "$JDK"          gradle/gradle-daemon-jvm.properties 's/^toolchainVersion=//p'
+pin SDK_PLATFORM "$SDK_PLATFORM" gradle.properties                   's/^androidApiLevel=(.*)/android-\1/p'
+pin BUILD_TOOLS  "$BUILD_TOOLS"  gradle.properties                   's/^androidBuildToolsVersion=//p'
+pin NDK_VERSION  "$NDK_VERSION"  build.gradle.kts                    's/^ *ndkVersion = "(.*)"/\1/p'
+[ ${#STALE[@]} -eq 0 ] || die "$TS_REF needs new toolchain pins; set these lines in scripts/build.sh:
+$(printf '%s\n' "${STALE[@]}")"
+info "Toolchain pins match $TS_REF (JDK $JDK, $SDK_PLATFORM, build-tools $BUILD_TOOLS, NDK $NDK_VERSION)"
+
+# ---- 3. patches -------------------------------------------------------------
 # Upstream runs at minSdk 26, so API-guard rot accumulates: calls to APIs newer
-# than 22 that upstream can never hit. Each patch here fixes one, and is scoped
-# to a single ref so it is obvious what diverges from upstream and why.
-if [ -d "$PATCHDIR" ]; then
-  n=0
-  for p in "$PATCHDIR"/*.patch; do
-    [ -e "$p" ] || continue
-    if git -C "$SRC" apply --check "$p" 2>/dev/null; then
-      git -C "$SRC" apply "$p"
-      info "Applied patch: $(basename "$p")"
-      n=$((n+1))
-    else
-      git -C "$SRC" apply --check -v "$p" >&2 || true   # show which file and hunk failed
-      die "patch does not apply to $TS_REF: $(basename "$p")"
-    fi
-  done
-  if [ "$PATCH_ONLY" = 1 ]; then
-    [ "$n" -gt 0 ] || die "patches/$(basename "$PATCHDIR") has no *.patch; nothing to check"
-    bold "Patch check passed for $TS_REF ($n patches)"
-    exit 0
+# than 22 that upstream can never hit. Each patch here fixes one, so it is obvious
+# what diverges from upstream and why.
+for p in "${PATCHES[@]}"; do
+  if git -C "$SRC" apply --check "$p" 2>/dev/null; then
+    git -C "$SRC" apply "$p"
+    info "Applied patch: $(basename "$p")"
+  else
+    git -C "$SRC" apply --check -v "$p" >&2 || true   # show which file and hunk failed
+    die "patch does not apply to $TS_REF: $(basename "$p")"
   fi
-else
-  info "No patches for $TS_REF"
+done
+# 0005's bug class, which NewApi lint cannot see: below API 24, decoding JSON from a
+# stream (decodeFromStream, decodeToSequence) fails on any body over 16 KB. A call site
+# upstream adds must join 0005 before it ships.
+# grep exits 1 for no match and 2 when it cannot scan; only the first is a pass.
+hits="$(cd "$SRC" && grep -rlE 'decode(FromStream|ToSequence) *[<(]' android/src/main)" \
+  || [ $? = 1 ] || die "cannot scan $TS_REF's android/src/main for stream JSON decodes"
+[ -z "$hits" ] || die "stream JSON decode called in ${hits//$'\n'/, }; extend patch 0005"
+if [ "$PATCH_ONLY" = 1 ]; then
+  bold "Patch check passed for $TS_REF (${#PATCHES[@]} patches)"
+  exit 0
 fi
 
 # ---- 4. preflight -----------------------------------------------------------
 for c in curl unzip; do command -v $c >/dev/null || die "$c not found"; done
 
 if [ -z "${JAVA_HOME:-}" ]; then
-  for c in "$( [ "$(uname)" = Darwin ] && /usr/libexec/java_home -F -v 17 2>/dev/null )" \
-           "$HOME"/.local/jdks/jdk-17*/Contents/Home "$HOME"/.local/jdks/jdk-17* \
-           /usr/lib/jvm/java-17-openjdk-*; do
-    if [ -n "$c" ] && [ -x "$c/bin/java" ] && [ "$(java_major "$c")" = 17 ]; then JAVA_HOME="$c"; break; fi
+  for c in "$( [ "$(uname)" = Darwin ] && /usr/libexec/java_home -F -v "$JDK" 2>/dev/null )" \
+           "$HOME"/.local/jdks/jdk-"$JDK"*/Contents/Home "$HOME"/.local/jdks/jdk-"$JDK"* \
+           /usr/lib/jvm/java-"$JDK"-openjdk-*; do
+    if [ -n "$c" ] && [ -x "$c/bin/java" ] && [ "$(java_major "$c")" = "$JDK" ]; then JAVA_HOME="$c"; break; fi
   done
 fi
-[ -n "${JAVA_HOME:-}" ] || die "JDK 17 not found. Set JAVA_HOME. See docs/BUILD.md."
+[ -n "${JAVA_HOME:-}" ] || die "JDK $JDK not found. Set JAVA_HOME. See docs/BUILD.md."
 export JAVA_HOME
-JAVA_MAJOR="$(java_major "$JAVA_HOME")"
-[ "$JAVA_MAJOR" = "17" ] || die "JAVA_HOME is JDK $JAVA_MAJOR; AGP needs JDK 17. See docs/BUILD.md."
-info "JDK 17: $JAVA_HOME"
+JAVA_MAJOR="$(java_major "$JAVA_HOME")" || die "cannot run $JAVA_HOME/bin/java"
+# Gradle's daemon-JVM criteria (gradle-daemon-jvm.properties) would otherwise download a JDK.
+[ "$JAVA_MAJOR" = "$JDK" ] || die "JAVA_HOME is JDK $JAVA_MAJOR; $TS_REF builds with JDK $JDK. See docs/BUILD.md."
+info "JDK $JDK: $JAVA_HOME"
 
 if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
   if [ "$(uname)" = "Darwin" ]; then ANDROID_SDK_ROOT="$HOME/Library/Android/sdk"
@@ -186,14 +198,8 @@ fi
 export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
 
 # ---- 6. Go toolchain --------------------------------------------------------
-if [ -x "$SRC/tool/go" ]; then
-  GO="$SRC/tool/go"                      # upstream wrapper; fetches its own pinned Go
-  info "Using upstream tool/go"
-else
-  command -v go >/dev/null || die "go not found ($TS_REF has no tool/go)"
-  GO="go"
-  info "Using system go: $(go version)"
-fi
+GO="$SRC/tool/go"                        # upstream wrapper; fetches its own pinned Go
+[ -x "$GO" ] || die "$TS_REF has no tool/go"
 
 # gomobile shells out to a bare `go`, so the pinned toolchain must win on PATH.
 # Otherwise a modern system Go compiles the ref's pinned x/tools and fails with
@@ -203,31 +209,22 @@ GOROOT_PINNED="$( cd "$SRC" && "$GO" env GOROOT 2>/dev/null || true )"
 if [ -n "$GOROOT_PINNED" ] && [ -x "$GOROOT_PINNED/bin/go" ]; then
   export PATH="$GOROOT_PINNED/bin:$PATH"
   info "Pinned Go on PATH: $("$GOROOT_PINNED/bin/go" version)"
-elif [ "$GO" != go ]; then
-  die "tool/go did not yield a toolchain (rerun: cd $SRC && tool/go version)"
 else
-  warn "could not resolve a pinned GOROOT; gomobile will use whatever go is on PATH"
+  die "tool/go did not yield a toolchain (rerun: cd $SRC && tool/go version)"
 fi
 
 # ---- 7. apply the API-floor overrides ---------------------------------------
-BG="$SRC/android/build.gradle"
-CUR_MIN="$(grep -oE 'minSdkVersion +[0-9]+' "$BG" | head -1 | grep -oE '[0-9]+')"
+BG="$SRC/android/build.gradle.kts"
+CUR_MIN="$(sed -nE 's/^ *minSdk = ([0-9]+)$/\1/p' "$BG" 2>/dev/null)" || true
+[ -n "$CUR_MIN" ] || die "no 'minSdk = N' line in $BG; upstream changed how it sets the API floor"
 if [ "$CUR_MIN" != "$MIN_SDK" ]; then
-  info "Overriding minSdkVersion $CUR_MIN -> $MIN_SDK"
-  sed -i.bak -E "s/minSdkVersion +[0-9]+/minSdkVersion $MIN_SDK/" "$BG" && rm -f "$BG.bak"
+  info "Overriding minSdk $CUR_MIN -> $MIN_SDK"
+  sed -i.bak -E "s/^( *minSdk = )[0-9]+$/\1$MIN_SDK/" "$BG" && rm -f "$BG.bak"
 fi
-
-# getLocalProperty() reads local.properties; absent keys break configuration.
-[ -f "$SRC/android/local.properties" ] || cat > "$SRC/android/local.properties" <<EOF
-sdk.dir=$ANDROID_SDK_ROOT
-githubUsername=
-githubPassword=
-github2FASecret=
-EOF
 
 # ---- 8. tailscale.version ---------------------------------------------------
 # Must precede the native build: version-ldflags.sh does `source tailscale.version`,
-# and 1.78.0+ build.gradle reads it via getVersionProperty().
+# and build.gradle.kts reads it via getVersionProperty().
 #
 # Getting this order wrong is not a soft failure. Without the stamp,
 # version.Long() is empty and tailscale.com/version has an android+tailscale_go
@@ -246,53 +243,36 @@ mkdir -p "$SRC/android/libs"
 # single-ABI build is named and asserted as whatever arch it targeted.
 ABI_LABEL="universal"; TARGET_ABI="armeabi-v7a"
 
-if [ -d "$SRC/libtailscale" ]; then
-  # Modern recipe: gomobile bind. The -androidapi flag is a second, independent
-  # API gate — leaving it at 26 yields an APK that installs then dies natively.
-  info "Native: gomobile bind (androidapi=$MIN_SDK, target=$GOMOBILE_TARGET)"
-  case "$GOMOBILE_TARGET" in
-    *,*) ;;                                                     # list of targets
-    */*) TARGET_ABI="$(abi_for "${GOMOBILE_TARGET#*/}")"; ABI_LABEL="$TARGET_ABI" ;;
-    *)   ;;                                                     # bare "android"
-  esac
-  export GOBIN="$SRC/.gobin"; mkdir -p "$GOBIN"
-  export PATH="$GOBIN:$PATH"
-  ( cd "$SRC" && "$GO" install golang.org/x/mobile/cmd/gobind golang.org/x/mobile/cmd/gomobile )
+# gomobile bind. The -androidapi flag is a second, independent API gate —
+# leaving it at 26 yields an APK that installs then dies natively.
+info "Native: gomobile bind (androidapi=$MIN_SDK, target=$GOMOBILE_TARGET)"
+case "$GOMOBILE_TARGET" in
+  *,*) ;;                                                     # list of targets
+  */*) TARGET_ABI="$(abi_for "${GOMOBILE_TARGET#*/}")"; ABI_LABEL="$TARGET_ABI" ;;
+  *)   ;;                                                     # bare "android"
+esac
+export GOBIN="$SRC/.gobin"; mkdir -p "$GOBIN"
+export PATH="$GOBIN:$PATH"
+( cd "$SRC" && "$GO" install golang.org/x/mobile/cmd/gobind golang.org/x/mobile/cmd/gomobile )
 
-  # Do not swallow this failure — an unstamped build panics at runtime, not here.
-  LDFLAGS=""
-  if [ -x "$SRC/version-ldflags.sh" ]; then
-    LDFLAGS="$( cd "$SRC" && ./version-ldflags.sh )" \
-      || die "version-ldflags.sh failed; refusing to build an unstamped AAR (it would SIGABRT on launch)"
-    case "$LDFLAGS" in
-      *version.longStamp=?*) : ;;
-      *) die "version-ldflags.sh produced no longStamp; refusing to build an unstamped AAR" ;;
-    esac
-  fi
-  TAGS=""
-  if [ -x "$SRC/build-tags.sh" ]; then TAGS="$("$SRC/build-tags.sh" 2>/dev/null || true)"; fi
+# Do not swallow this failure — an unstamped build panics at runtime, not here.
+LDFLAGS="$( cd "$SRC" && ./version-ldflags.sh )" \
+  || die "version-ldflags.sh failed; refusing to build an unstamped AAR (it would SIGABRT on launch)"
+case "$LDFLAGS" in
+  *version.longStamp=?*) : ;;
+  *) die "version-ldflags.sh produced no longStamp; refusing to build an unstamped AAR" ;;
+esac
+# Upstream's feature tags (its Makefile's GOMOBILE_BUILD_TAGS), so this AAR has the
+# feature set upstream ships rather than one this script guessed.
+UP_TAGS="$(sed -n 's/^GOMOBILE_BUILD_TAGS := //p' "$SRC/Makefile" 2>/dev/null)" || true
+[ -n "$UP_TAGS" ] || die "no GOMOBILE_BUILD_TAGS in $TS_REF's Makefile; upstream changed its native build"
+TAGS="$("$SRC/build-tags.sh")" || die "build-tags.sh failed"
+TAGS+=" $UP_TAGS"
 
-  GOMOBILE_ARGS=(bind -target "$GOMOBILE_TARGET" -androidapi "$MIN_SDK")
-  [ -n "$TAGS" ]    && GOMOBILE_ARGS+=(-tags "$TAGS")
-  [ -n "$LDFLAGS" ] && GOMOBILE_ARGS+=(-ldflags "-w $LDFLAGS")
-  GOMOBILE_ARGS+=(-o android/libs/libtailscale.aar ./libtailscale)
-
-  ( cd "$SRC" && gomobile "${GOMOBILE_ARGS[@]}" )
-  [ -f "$SRC/android/libs/libtailscale.aar" ] || die "libtailscale.aar was not produced"
-  info "libtailscale.aar: $(du -h "$SRC/android/libs/libtailscale.aar" | cut -f1)"
-else
-  # Legacy recipe: gogio archive.
-  info "Native: gogio (arch=${TS_ARCH:-all})"
-  if [ -n "$TS_ARCH" ]; then TARGET_ABI="$(abi_for "$TS_ARCH")"; ABI_LABEL="$TARGET_ABI"; fi
-  VN="$(grep -m1 versionName "$BG" 2>/dev/null | sed -E 's/.*"(.*)".*/\1/' || true)"
-  ARCH_FLAG=(); [ -n "$TS_ARCH" ] && ARCH_FLAG=(-arch "$TS_ARCH")
-  ( cd "$SRC" && "$GO" run gioui.org/cmd/gogio \
-      -ldflags "-X tailscale.com/version.longStamp=$VN -X tailscale.com/version.shortStamp=${VN%%-*}" \
-      -buildmode archive -target android "${ARCH_FLAG[@]}" \
-      -appid com.tailscale.ipn -tags novulkan,tailscale_go \
-      -o android/libs/ipn.aar github.com/tailscale/tailscale-android/cmd/tailscale )
-  [ -f "$SRC/android/libs/ipn.aar" ] || die "ipn.aar was not produced"
-fi
+( cd "$SRC" && gomobile bind -target "$GOMOBILE_TARGET" -androidapi "$MIN_SDK" \
+    -tags "$TAGS" -ldflags "-w $LDFLAGS" -o android/libs/libtailscale.aar ./libtailscale )
+[ -f "$SRC/android/libs/libtailscale.aar" ] || die "libtailscale.aar was not produced"
+info "libtailscale.aar: $(du -h "$SRC/android/libs/libtailscale.aar" | cut -f1)"
 
 # ---- 10. gradle -------------------------------------------------------------
 GP="$SRC/android/gradle.properties"
@@ -303,27 +283,24 @@ else
   echo "org.gradle.jvmargs=-Xmx${GRADLE_HEAP} -XX:MaxMetaspaceSize=1g" >> "$GP"
 fi
 
-# Flavors were removed once Tailscale dropped Play Services; pick whichever exists.
-if grep -qi "fdroid" "$BG"; then
-  VARIANT=FdroidDebug
-  APK_GLOB="$SRC/android/build/outputs/apk/fdroid/debug/*.apk"
-else
-  VARIANT=Debug
-  APK_GLOB="$SRC/android/build/outputs/apk/debug/*.apk"
-fi
-GRADLE_ARGS=(--no-daemon --continue "assemble$VARIANT")
-[ "$SKIP_TESTS" = "1" ] || GRADLE_ARGS+=("test${VARIANT}UnitTest")
+# Without VERSION_CODE_BASE, build.gradle.kts derives versionCode from the wall clock.
+# Use the upstream commit's time instead (upstream's scheme: minutes since the epoch,
+# times 10): the same ref always gets the same versionCode, and a newer ref a larger one.
+COMMIT_TIME="$(git -C "$SRC" log -1 --format=%ct)" || die "cannot read the commit time of $TS_REF"
+VERSION_CODE=$(( COMMIT_TIME / 60 * 10 ))
+GRADLE_ARGS=(--no-daemon --continue -PVERSION_CODE_BASE="$VERSION_CODE" assembleDebug)
+[ "$SKIP_TESTS" = "1" ] || GRADLE_ARGS+=(testDebugUnitTest)
 if [ "$LINT" = "1" ]; then
   # NewApi only: calls to APIs above MIN_SDK are the bug class this repo patches.
-  GRADLE_ARGS+=(-I "$REPO_ROOT/scripts/lint-newapi.gradle" "lint$VARIANT")
-  if [ -f "$PATCHDIR/lint.xml" ]; then export TS_LINT_CONFIG="$PATCHDIR/lint.xml"; fi
+  GRADLE_ARGS+=(-I "$REPO_ROOT/scripts/lint-newapi.gradle" lintDebug)
+  export TS_LINT_CONFIG="$PATCHDIR/lint.xml"
 fi
 
 info "Gradle: ${GRADLE_ARGS[*]}"
 ( cd "$SRC/android" && ./gradlew "${GRADLE_ARGS[@]}" )
 
-APK="$(ls -1 $APK_GLOB 2>/dev/null | head -1)"
-[ -n "$APK" ] && [ -f "$APK" ] || die "no APK produced under $APK_GLOB"
+APK="$SRC/android/build/outputs/apk/debug/android-debug.apk"
+[ -f "$APK" ] || die "Gradle produced no $APK"
 
 # ---- 11. verify + publish ---------------------------------------------------
 mkdir -p "$DIST"
@@ -336,8 +313,11 @@ if [ -f "$OUT" ] && ! PATH="$JAVA_HOME/bin:$PATH" "$ANDROID_SDK_ROOT/build-tools
 fi
 cp "$APK" "$OUT"
 
-info "Verifying (minSdk <= $MIN_SDK, $TARGET_ABI Go library present)"
-if ! python3 "$REPO_ROOT/scripts/verify-apk.py" --require-min-sdk "$MIN_SDK" --require-abi "$TARGET_ABI" "$OUT"; then
+# versionCode: an unknown -P is ignored, so a renamed property upstream would silently bring
+# back the wall-clock versionCode.
+info "Verifying (minSdk <= $MIN_SDK, $TARGET_ABI Go library present, versionCode $VERSION_CODE)"
+if ! python3 "$REPO_ROOT/scripts/verify-apk.py" --require-min-sdk "$MIN_SDK" --require-abi "$TARGET_ABI" \
+     --require-version-code "$VERSION_CODE" "$OUT"; then
   rm -f "$OUT"
   die "verification failed — artifact rejected"
 fi

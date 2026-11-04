@@ -124,7 +124,19 @@ if [ ${#MISSING[@]} -gt 0 ]; then
 fi
 
 export ANDROID_SERIAL="emulator-$PORT"
-adb() { "$SDK/platform-tools/adb" "$@"; }
+# Every adb call is bounded: an `adb shell` to an emulator that is not up yet can block
+# forever, and then no wait_for deadline (BOOT_TIMEOUT included) ever fires. perl's alarm
+# survives exec, so adb itself gets SIGALRM (exit 142) and stays in the foreground.
+# SIGALRM is reset in case the caller ignores it; stdin is /dev/null because `adb shell` on API 22
+# would forward it to the device.
+ADB_TIMEOUT=30        # seconds per call; adb install passes its own
+adb() {
+  local rc=0
+  perl -e '$SIG{ALRM} = "DEFAULT"; alarm shift; exec @ARGV or die "exec $ARGV[0]: $!\n"' \
+    "$ADB_TIMEOUT" "$SDK/platform-tools/adb" "$@" </dev/null || rc=$?
+  [ "$rc" != 142 ] || printf 'adb %s: no answer in %ss; killed\n' "$1" "$ADB_TIMEOUT" >&2
+  return "$rc"
+}
 
 if adb devices | grep -E "^${ANDROID_SERIAL}[[:space:]]+device$" >/dev/null; then
   die "$ANDROID_SERIAL is already running; stop it first (adb -s $ANDROID_SERIAL emu kill)"
@@ -146,16 +158,16 @@ app_lines() {  # app_lines < DUMP: the lines logged by the app's processes; fail
 }
 app_log() { log | app_lines; }   # this boot
 SCAN=0        # 1 while the app runs: every wait then also fails fast on a crash
-no_crash() {  # die on a crash, a native fatal signal, a failed worker or a missing API
+no_crash() {  # die on a crash, a native fatal signal, a failed worker, a missing API or a dropped IPN notification
   local l a hits
   l="$(log)" || die "$1: adb logcat failed"   # one snapshot per call
   # Checked here, not in app_lines: a die inside $(...) or a pipeline ends only that subshell.
   a="$(printf '%s\n' "$l" | app_lines)" || die "$1: no $PKG process in this boot's log"
   hits="$(printf '%s\n' "$a" | awk '
-    $5 ~ /^[WEF]$/ && /FATAL EXCEPTION|Fatal signal|failed because it threw|NoSuchMethodError|NoClassDefFoundError|VerifyError/ { print; n = 2; next }
+    $5 ~ /^[WEF]$/ && /FATAL EXCEPTION|Fatal signal|failed because it threw|failed to process IPN notification|NoSuchMethodError|NoClassDefFoundError|VerifyError/ { print; n = 2; next }
     n-- > 0' || true)"
   hits+="${hits:+$'\n'}$(printf '%s\n' "$l" | grep -E "ANR in $PKG|Process $PKG \(pid [0-9]+\) has died" || true)"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" | head -20 >&2; die "$1: the app crashed or hit a missing API"; }
+  [ -z "$hits" ] || { printf '%s\n' "$hits" | head -20 >&2; die "$1: the app crashed, hit a missing API or dropped an IPN notification"; }
 }
 wait_for() {  # wait_for SECONDS DESCRIPTION CMD...: retry CMD once a second
   local t="$1" what="$2" end=$((SECONDS + $1)); shift 2
@@ -246,11 +258,13 @@ running() {    # Running; die at once, with a fixed message, if control rejected
 }
 policy_reads() { local a; a="$(app_log)" || die "login: no $PKG process in this boot's log"; printf '%s\n' "$a" | grep -c 'setting opts.AuthKey by syspolicy' || true; }
 more_reads() { local n; n="$(policy_reads)" || exit 1; [ "$n" -gt "$1" ]; }   # policy_reads printed why
-tun_ip() {     # tun0's address if it is UP; fails if netcfg gave no output
+tun_ip() {     # the tailnet address of an UP tunN, if any; fails if netcfg gave no output
+  # Not just tun0: each establish() makes a new tunN, and upstream (from 1.104.5) calls it twice
+  # in a row when it connects, so the tunnel can be tun1 while a superseded tun0 lingers.
   local nc; nc="$(ifaces)" || return 1
-  printf '%s\n' "$nc" | awk '$1 == "tun0" && $2 == "UP" { split($3, a, "/"); print a[1] }'
+  printf '%s\n' "$nc" | awk '$1 ~ /^tun[0-9]+$/ && $2 == "UP" && $3 ~ /^100\./ { split($3, a, "/"); print a[1]; exit }'
 }
-tun_up()     { local ip; ip="$(tun_ip)" || return 1; case "$ip" in 100.*) ;; *) return 1 ;; esac; }
+tun_up()     { local ip; ip="$(tun_ip)" || return 1; [ -n "$ip" ]; }
 tun_down()   { local ip; ip="$(tun_ip)" || return 1; [ -z "$ip" ]; }
 is_root()    { adb shell id 2>/dev/null | grep -F 'uid=0(' >/dev/null; }
 dev_ok() {     # dev_ok CMD: CMD succeeded on the device (adb shell exits 0 on API 22; restorecon chats)
@@ -302,6 +316,7 @@ reboot_app() {  # reboot_app LABEL: save this boot's log, reboot, wait until the
 
 finish() {
   local rc=$?
+  local ADB_TIMEOUT=10   # after an adb hang, every diagnostic call below would hang as well
   if [ "$rc" != 0 ] && [ -n "${EMU_PID:-}" ]; then
     log > "$OUT/logcat-boot$BOOT.txt" || true
     adb exec-out screencap -p > "$OUT/screen.png" 2>/dev/null || true
@@ -347,17 +362,20 @@ EMU_PID=$!
 wait_for "$BOOT_TIMEOUT" "boot" booted
 info "Booted in $((SECONDS - t0))s"
 adb logcat -G 4M        # keep the whole boot in the ring buffer; reset by every reboot
-r="$(adb install "$APK" 2>&1)" || true
+r="$(ADB_TIMEOUT=300 adb install "$APK" 2>&1)" || true
 adb shell pm path "$PKG" | grep -F 'package:' >/dev/null || die "install of $APK failed: $(printf '%s\n' "$r" | tail -1)"
 
 # ---- 4. checks, in an order where each leaves the state the next needs -------
-# 0011 + 0006: CONNECT_VPN before any launch (logged out, no consent) runs StartVPNWorker
-# through WorkManager, which must post the "open Tailscale" notification.
+# 0011: CONNECT_VPN before any launch (logged out, no consent) runs StartVPNWorker through
+# WorkManager, which must post the "open Tailscale" notification. It is expedited work: below
+# API 31 that runs in WorkManager's foreground service and calls getForegroundInfo(), which
+# upstream implements from 1.104.5 (1.98.8 needed patch 0006 to avoid this path).
 adb shell am broadcast -a "$PKG.CONNECT_VPN" -n "$PKG/.IPNReceiver" >/dev/null
 SCAN=1
-wait_log "0011/0006 StartVPNWorker to run" "Worker result FAILURE for Work .*StartVPNWorker"
+wait_log "0011 expedited work in WorkManager's foreground service" "WM-SystemFgDispatcher: Started foreground service"
+wait_log "0011 StartVPNWorker to run" "Worker result FAILURE for Work .*StartVPNWorker"
 wait_for 10 "0011 the 'open Tailscale' notification" notified
-pass "0011 CONNECT_VPN without consent posts the notification; 0006 worker runs"
+pass "0011 CONNECT_VPN without consent posts the notification; expedited worker ran in the foreground service"
 
 # 0002 + 0010: launch; the network callback must pick a default network at startup.
 adb shell am start -n "$PKG/.MainActivity" >/dev/null   # no -W: it never returns if launch crashes
@@ -389,8 +407,7 @@ adb shell input keyevent KEYCODE_HOME             # leave the login page it open
 # disconnected (WantRunning=false), with no crash and no tunnel.
 reboot_app 0008
 wait_log "0008 BootReceiver's decision" "BootReceiver: boot: WantRunning=false; staying disconnected" 60
-nc="$(ifaces)" || die "0008: netcfg listed no interfaces"
-printf '%s\n' "$nc" | grep -E '^tun0 ' >/dev/null && die "0008: tun0 is up while logged out"
+tun_down || die "0008: a tunnel is up while logged out (or netcfg failed)"
 no_crash 0008
 pass "0008 reboot while logged out: BootReceiver stays disconnected, no crash, no tunnel"
 log > "$OUT/logcat-boot$BOOT.txt"
@@ -421,10 +438,10 @@ if [ "$NET" = 1 ]; then
   tap_text "Log in"
   wait_for 30 "login to take the key from the AuthKey restriction" more_reads "$n"
   wait_for 90 "state Running" running
-  wait_for 30 "tun0 with a tailnet address" tun_up
+  wait_for 30 "a tun interface with a tailnet address" tun_up
   EMU_IP="$(tun_ip)" || die "login: netcfg failed"
   dev_ok "rm $RES && [ ! -e $RES ]" || die "could not remove the AuthKey restriction"
-  pass "login with an auth key: Running, tun0 $EMU_IP"
+  pass "login with an auth key: Running, tunnel $EMU_IP"
 
   # 0004: below API 23 the app's own sockets stay out of its tunnel through VpnService.protect().
   al="$(app_log)" || die "0004: no $PKG process in this boot's log"
@@ -435,10 +452,12 @@ if [ "$NET" = 1 ]; then
   no_crash 0004
   pass "0004 sockets protected; tunnel traffic both ways"
 
-  # 0005: the netmap (well over 16 KB with a real DERP map) decodes; the peer list is built
-  # from it, with this device first.
+  # 0005: the first PeersChanged update, which carries every peer (InitialStatus arrives before
+  # Running, with none), decodes: the debug build logs it only after a successful decode, and
+  # no_crash fails on 'failed to process IPN notification'. The peer list is built from it.
+  wait_log "0005 the first PeersChanged update decoded" "received bus update: .*peersChanged=[1-9]"
   wait_for 30 "0005 this device in the peer list" ui_has "$EMU_IP"
-  pass "0005 netmap decoded: peer list shown"
+  pass "0005 peer list decoded (PeersChanged)"
 
   # 0007: peer details format a key expiry with java.time (TimeUtil).
   wait_for 90 "the 0007 target in the emulator's peer list (can tag:fireos-ci see the expiring node this host sees?)" \
@@ -452,14 +471,14 @@ if [ "$NET" = 1 ]; then
   # 0010: a network change while connected; the tunnel must follow the new network.
   data_toggle 0010
   wait_for 60 "host -> emulator after the network change" reachable "$EMU_IP"
-  tun_up || die "0010: tun0 is gone after the network change (or netcfg failed)"
+  tun_up || die "0010: the tunnel is gone after the network change (or netcfg failed)"
   pass "0010 network change while connected: $old -> $(default_net), tunnel kept"
 
   # 0008: reboot while connected. BootReceiver restarts the VPN without the app being opened.
   reboot_app "0008 connected"
   wait_log "0008 BootReceiver reconnecting" "BootReceiver: boot: WantRunning=true" 60
   wait_for 90 "state Running after boot" in_state Running
-  wait_for 30 "tun0 after boot" tun_up
+  wait_for 30 "the tunnel after boot" tun_up
   ip="$(tun_ip)" || die "0008: netcfg failed"
   [ "$ip" = "$EMU_IP" ] || die "0008: tailnet address changed across the reboot"
   wait_for 60 "host -> emulator after boot" reachable "$EMU_IP"
@@ -468,10 +487,10 @@ if [ "$NET" = 1 ]; then
   # 0008: disconnect, then reboot. The manual disconnect must survive the reboot.
   adb shell am broadcast -a "$PKG.DISCONNECT_VPN" -n "$PKG/.IPNReceiver" >/dev/null
   wait_for 30 "state Stopped" in_state Stopped
-  wait_for 30 "tun0 down" tun_down
+  wait_for 30 "the tunnel down" tun_down
   reboot_app "0008 disconnected"
   wait_log "0008 BootReceiver staying down" "BootReceiver: boot: WantRunning=false" 60
-  for _ in {1..15}; do tun_down || die "0008: tun0 came up after a manual disconnect (or netcfg failed)"; sleep 1; done
+  for _ in {1..15}; do tun_down || die "0008: the tunnel came up after a manual disconnect (or netcfg failed)"; sleep 1; done
   no_crash 0008
   pass "0008 disconnect then reboot: stays down"
   log > "$OUT/logcat-boot$BOOT.txt"

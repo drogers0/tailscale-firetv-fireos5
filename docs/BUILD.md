@@ -14,7 +14,7 @@ patching **both** of these — the script does it for you:
 
 | Where | Upstream | Patched to |
 |---|---|---|
-| `android/build.gradle` | `minSdkVersion 26` | `minSdkVersion 22` |
+| `android/build.gradle.kts` | `minSdk = 26` | `minSdk = 22` |
 | `gomobile bind` | `-androidapi 26` | `-androidapi 22` |
 
 > [!WARNING]
@@ -31,10 +31,9 @@ compile time to **run time**. Watch for `NoSuchMethodError`, `NoClassDefFoundErr
 
 | Requirement | Why | Notes |
 |---|---|---|
-| **JDK 17** | AGP targets it (8.6.1 on 1.98.8) | **Not 21.** See [below](#jdk-17-is-not-optional) |
-| **Android SDK** | the platform, build-tools and cmdline-tools pinned by `SDK_PLATFORM`, `BUILD_TOOLS` and `CMDLINE_TOOLS` in `scripts/build.sh` | script installs what's missing |
-| **NDK 23.1.7779620** | cgo cross-compile for `armeabi-v7a` | ~1 GB; exact version required |
-| **Go** | only for legacy refs without `tool/go` | modern refs fetch Tailscale's pinned toolchain with `curl` |
+| **JDK** (the major pinned as `JDK=` in `scripts/build.sh`) | upstream's Gradle daemon criteria and AGP | see [below](#the-pinned-jdk-is-required) |
+| **Android SDK** | the platform, build-tools and cmdline-tools pinned in `scripts/build.sh` | script installs what's missing |
+| **NDK** (the `NDK_VERSION` pin) | cgo cross-compile for `armeabi-v7a` | ~1 GB; exact version required |
 | **~5 GB disk** | SDK + NDK + Gradle caches | |
 | `git`, `curl`, `unzip` | | |
 | `shellcheck`, `python3` | `make check` | `brew install shellcheck` / `apt install shellcheck`. The `verify-apk` tests skip without an SDK `aapt2` and platform (`android.jar`) |
@@ -42,35 +41,36 @@ compile time to **run time**. Watch for `NoSuchMethodError`, `NoClassDefFoundErr
 ### macOS
 
 ```sh
-brew install --cask temurin@17
+brew install --cask "temurin@$(sed -n 's/^JDK=//p' scripts/build.sh)"
 # Android SDK: Android Studio, or `brew install --cask android-commandlinetools`
 ```
 
 ### Debian / Ubuntu
 
 ```sh
-sudo apt install -y openjdk-17-jdk git curl unzip
+sudo apt install -y "openjdk-$(sed -n 's/^JDK=//p' scripts/build.sh)-jdk" git curl unzip
 ```
 
-### JDK 17 is not optional
+### The pinned JDK is required
 
-AGP officially supports JDK 17; JDK 21 support is inconsistent across the 8.x line. Building with 21
-typically fails deep into the Gradle run with an opaque Kotlin or Jetifier error, after
-you've already paid for the whole download. The build script refuses to start on the wrong
-JDK rather than let you discover this twenty minutes in.
+Upstream's `gradle/gradle-daemon-jvm.properties` names the JDK major its Gradle daemon must
+run on, and Gradle downloads one when `JAVA_HOME` does not match. The build script therefore
+checks `JAVA_HOME`'s major version against the `JDK` pin in `scripts/build.sh` before
+anything slow, and refuses to start on any other.
 
 Point it at the right one explicitly if you have several installed:
 
 ```sh
 # macOS
-export JAVA_HOME=$(/usr/libexec/java_home -F -v 17)
+export JAVA_HOME=$(/usr/libexec/java_home -F -v "$(sed -n 's/^JDK=//p' scripts/build.sh)")
 # Linux
-export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+export JAVA_HOME=/usr/lib/jvm/java-"$(sed -n 's/^JDK=//p' scripts/build.sh)"-openjdk-amd64
 ```
 
-With `JAVA_HOME` unset, the script tries `java_home -F -v 17`, then `~/.local/jdks/jdk-17*`,
-then the Debian path, and checks each candidate's major version itself: plain
-`java_home -v 17` silently returns another JDK when no 17 is registered.
+With `JAVA_HOME` unset, the script tries `java_home -F -v <JDK>`, then
+`~/.local/jdks/jdk-<JDK>*`, then the Debian path (`<JDK>` is the `JDK=` pin), and checks each
+candidate's major version itself: plain `java_home -v <JDK>` silently returns another JDK
+when that major is not registered.
 
 ## Build
 
@@ -82,7 +82,7 @@ The Make targets are thin wrappers around the scripts:
 
 | Target | Does |
 |---|---|
-| `make check` | shellcheck, `verify-apk` tests, and `scripts/build.sh --patch-only` (the series applies to `TS_REF`; needs only git) |
+| `make check` | shellcheck, `verify-apk` tests, and `scripts/build.sh --patch-only` (toolchain pins match `TS_REF`, the series applies, no stream JSON decode remains; needs only git) |
 | `make build` | full build of the armeabi-v7a APK into `dist/` |
 | `make build-emu` | the same for the local emulator ABI (arm64 on arm64 hosts, x86_64 elsewhere), into `.build/dist-emu/` so `dist/` keeps only shippable APKs |
 | `make emu-test` | boots a fresh API 22 emulator (its own AVD, `tsfire-api22`, on port 5584), installs the `build-emu` APK and runs `scripts/emu-test.sh`'s adb smoke checks; installs the emulator and image on first use; logs in `.build/emu-test/` |
@@ -95,52 +95,44 @@ Tunables stay environment variables read by `scripts/build.sh`; `make build TS_R
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TS_REF` | `1.98.8-t1241b225b-gbcbaf1889` | upstream tag or commit to build |
+| `TS_REF` | pinned in `scripts/build.sh` | upstream release tag that `patches/` is for |
 | `MIN_SDK` | `22` | API floor; patched into Gradle **and** gomobile |
 | `GOMOBILE_TARGET` | `android/arm` | `android/arm64` for arm64-only; bare `android` for all ABIs (slower, larger) |
 | `ANDROID_SDK_ROOT` | `~/Library/Android/sdk` (mac), `~/Android/Sdk` (linux) | SDK location |
-| `JAVA_HOME` | autodetected JDK 17 | |
+| `JAVA_HOME` | autodetected, the pinned JDK | |
 | `WORKDIR` | `.build` | scratch checkout, one dir per ref |
 | `DIST` | `dist` | APK output dir, absolute or relative to the repo root; `make build-emu`, `emu-test` and `emu-test-net` use the Makefile's `EMU_DIST` (`.build/dist-emu`), `make lint` uses `LINT_DIST` (`.build/dist-lint`). An APK already at the output path is overwritten only if it is debug-signed, so a release-signed one is never replaced |
+| `GRADLE_HEAP` | `6g` | Gradle's `-Xmx`; build.sh writes it into the checkout's `gradle.properties` on every run |
 | `SKIP_TESTS` | `1` | set `0` to run upstream unit tests (debug variant) |
-| `LINT` | `0` | `1` runs Android Lint, `NewApi` only, with the series' `lint.xml` ignores |
-| `PATCH_SERIES` | empty | a directory under `patches/` that overrides the by-ref lookup |
+| `LINT` | `0` | `1` runs Android Lint, `NewApi` only, with `patches/lint.xml`'s ignores |
 
-### Choosing `TS_REF`
+### `TS_REF` and the patch series
 
-| Ref | Patches needed | Notes |
-|---|---|---|
-| `3926cf4b56` | — | renders, but screens are stubs. Historical interest only |
-| `1.64.0-…` | 1 | complete UI, 2024-era Go core |
-| **`1.98.8-…`** | 11 | **default.** Current stable; patch set lives in `patches/1.98.8/` |
-
-Patches are per-ref (`patches/<ref>/`). Building a ref with no patch directory will hit the
-API-22 bugs listed in STATUS.md — expect `NoSuchMethodError` / `NoClassDefFoundError`.
+`patches/*.patch` is one series for the default `TS_REF`. Another ref needs the series rebased
+in the same change. `scripts/build.sh` supports upstream's current build layout only. A ref
+whose toolchain differs from the pins stops at once and prints the pin lines to change. A
+patch that does not apply stops the build, naming the hunk.
 
 ## What it does
 
 1. **Shallow-fetches** the single ref — no history clone. Re-runs reset any prior patches
    so overrides always apply to pristine sources.
-2. **Applies the patch series** — `patches/<ref or version>/*.patch`, or the directory
-   named by `PATCH_SERIES`. A non-applying patch fails here, before any SDK download;
-   `--patch-only` stops here.
-3. **Preflight** — verifies JDK 17 and the SDK; refuses to start on the wrong JDK.
-4. **Installs missing SDK packages** via `sdkmanager` (NDK, platform-34, build-tools).
-5. **Go toolchain** — uses upstream's `tool/go` wrapper when present (it fetches
-   Tailscale's own pinned Go). A system Go is used only for legacy refs without it, and a
-   `tool/go` that yields no toolchain is fatal.
-6. **Applies the API-floor overrides** (both places, see above) and writes a
-   `local.properties` stub, without which `getLocalProperty()` breaks configuration.
-   **Generates `tailscale.version`** (1.78.0+ read it at configuration time), then
-   **builds the native library** — auto-detects the recipe: `gomobile bind` against
-   `./libtailscale` on 1.64.0+, or legacy `gogio` on older refs. One ABI, not four.
-7. **Assembles the APK** — `assembleFdroidDebug` or `assembleDebug` depending on whether
-   the ref still has flavors — plus debug unit tests with `SKIP_TESTS=0`, and NewApi lint
-   with `LINT=1`.
+2. **Checks the toolchain pins** against the checkout, then **applies the patch series**,
+   `patches/*.patch` (fatal if there is none), then rejects any stream JSON decode (0005).
+   A non-applying patch fails here, before any SDK download; `--patch-only` stops here.
+3. **Preflight** — verifies the pinned JDK and the SDK; refuses to start on the wrong JDK.
+4. **Installs missing SDK packages** via `sdkmanager` (the pinned SDK packages).
+5. **Go toolchain** — upstream's `tool/go` wrapper (it fetches Tailscale's own pinned Go);
+   a ref without it, or a `tool/go` that yields no toolchain, is fatal.
+6. **Applies the API-floor overrides** (both places, see above), **generates
+   `tailscale.version`**, then **builds the native library** with `gomobile bind` against
+   `./libtailscale`, using upstream's `GOMOBILE_BUILD_TAGS`. One ABI, not four.
+7. **Assembles the APK** — `assembleDebug`, with a versionCode derived from the upstream
+   commit — plus debug unit tests with `SKIP_TESTS=0`, and NewApi lint with `LINT=1`.
 8. **Verifies** with `scripts/verify-apk.py`, which hard-fails on `minSdk` too high or
    the Go native library missing for the ABI you targeted, or for `armeabi-v7a` in a
-   multi-ABI build. A rejected artifact is deleted rather than written to the output
-   directory.
+   multi-ABI build, or a versionCode other than the one passed to Gradle. A rejected
+   artifact is deleted rather than written to the output directory.
 
 Output:
 
@@ -203,30 +195,29 @@ or `fatal error: glGetError: 0x501`. Both mean the UI still wants GLES 3.
 ## Troubleshooting
 
 **`Could not determine java version` / Kotlin daemon crash**
-Wrong JDK. See [JDK 17 is not optional](#jdk-17-is-not-optional).
+Wrong JDK. See [The pinned JDK is required](#the-pinned-jdk-is-required).
 
-**`NDK not configured` / `ndkVersion 23.1.7779620 not found`**
-The version is pinned by upstream's `build.gradle`. Newer NDKs are not drop-in.
+**`NDK not configured` / `ndkVersion … not found`**
+The version is pinned by upstream's `build.gradle.kts`; build.sh's `NDK_VERSION` must match.
+Newer NDKs are not drop-in.
 
 ```sh
-"$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'ndk;23.1.7779620'
+"$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "ndk;$(sed -n 's/^NDK_VERSION=//p' scripts/build.sh)"
 ```
+
+**`needs new toolchain pins`**
+Upstream changed its JDK, SDK platform, build-tools or NDK. Paste the printed `NAME=value`
+lines into `scripts/build.sh`.
 
 **Gradle OOM / GC overhead**
 Compose compilation is memory-hungry and upstream ships `-Xmx2g`. The script raises this
-to 6 GB. On a small machine, lower it in `.build/.../android/gradle.properties`.
-
-**`gogio: unknown flag -arch`**
-Very old `gioui.org/cmd`. Drop to `TS_ARCH=` to build all ABIs (slower, larger).
-
-**Build succeeds, `verify-apk.py` fails on minSdk**
-Gradle picked up the wrong module. The APK must come from `android/`, not
-`android_legacy/` — the latter is the Gio app and will crash on GLES 2.0 hardware.
+to 6 GB. On a small machine, lower it with `GRADLE_HEAP`, e.g. `GRADLE_HEAP=3g make build`.
 
 ## Reproducibility
 
-Pinned: the upstream commit (full SHA), the Go toolchain (via upstream's `tool/go`), the
-NDK version, `compileSdk 34`, and the per-ref patch series.
+Pinned: the upstream commit, the Go toolchain (`tool/go`), the toolchain pins in
+`scripts/build.sh` (JDK, SDK platform, build-tools, NDK), and `patches/`. The versionCode
+derives from the upstream commit time.
 
 Not pinned: Gradle's transitive dependency resolution, and the debug signing key — Android
 generates a random `~/.android/debug.keystore` per machine. **Two builds on different

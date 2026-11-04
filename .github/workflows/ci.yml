@@ -6,16 +6,14 @@ on:
                               # actions/cache entries saved from main are visible to every PR
   workflow_call:              # upstream-drift.yml runs tiers 0+1 against another ref
     inputs:
-      ts_ref:       { type: string, default: '' }
-      patch_series: { type: string, default: '' }
+      ts_ref: { type: string, default: '' }
 permissions:
   contents: read
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-env:                          # empty on PR/push: build.sh falls back to its pinned defaults
+env:                          # empty on PR/push: build.sh falls back to its pinned default
   TS_REF: ${{ inputs.ts_ref }}
-  PATCH_SERIES: ${{ inputs.patch_series }}
 jobs:
   changes:
     # Docs-only PRs skip every tier. A job skipped by its `if` counts as passed for required
@@ -51,7 +49,7 @@ jobs:
     name: Tier 1 · build, NewApi lint, unit tests
     needs: check
     runs-on: ubuntu-24.04
-    timeout-minutes: 25        # cold runs take about 8 minutes
+    timeout-minutes: 25        # cold runs take about 7 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -86,7 +84,7 @@ jobs:
       (github.event_name == 'pull_request' && github.base_ref == 'main') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
-    timeout-minutes: 25        # cold runs take about 9 minutes
+    timeout-minutes: 25        # cold runs take about 11 minutes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }

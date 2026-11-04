@@ -1,5 +1,5 @@
 diff --git a/android/src/main/AndroidManifest.xml b/android/src/main/AndroidManifest.xml
-index 9633e2b..d6728f2 100644
+index 97ecc92..fccbeba 100644
 --- a/android/src/main/AndroidManifest.xml
 +++ b/android/src/main/AndroidManifest.xml
 @@ -2,6 +2,8 @@
@@ -11,7 +11,7 @@ index 9633e2b..d6728f2 100644
      <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
      <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
      <uses-permission android:name="android.permission.INTERNET" />
-@@ -92,6 +94,15 @@
+@@ -98,6 +100,15 @@
              </intent-filter>
          </activity>
  
