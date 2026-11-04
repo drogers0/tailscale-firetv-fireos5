@@ -1,48 +1,28 @@
 diff --git a/android/src/main/java/com/tailscale/ipn/App.kt b/android/src/main/java/com/tailscale/ipn/App.kt
-index 012244f..36c176c 100644
+index 012244f..9e4681f 100644
 --- a/android/src/main/java/com/tailscale/ipn/App.kt
 +++ b/android/src/main/java/com/tailscale/ipn/App.kt
-@@ -516,13 +516,36 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
-     return getKeyStore().load(id)
+@@ -517,6 +517,20 @@ class App : UninitializedApp(), libtailscale.AppContext, ViewModelStoreOwner {
    }
  
-+  /**
-+   * On API < 23 there is no Network.bindSocket(FileDescriptor), and on this class of device
-+   * the NetworkRequest callback never fires, so cachedDefaultNetwork stays null forever.
-+   * Both leave Tailscale's own sockets inside its own tunnel, which breaks DERP and leaves
-+   * the node unreachable.
-+   *
-+   * VpnService.protect(fd) (API 14) is the platform's mechanism for exactly this: it keeps a
-+   * socket outside the VPN. It is weaker than bindSocket — it excludes the tunnel rather than
-+   * pinning to a chosen network — but on a single-uplink device that is equivalent.
-+   */
-+  private fun protectSocketFallback(fd: Int, why: String): Boolean {
-+    val svc = IPNService.runningInstance
-+    if (svc == null) {
-+      TSLog.d(TAG, "bindSocketToActiveNetwork: $why, and no running IPNService; noop")
-+      return false
-+    }
-+    val ok = svc.protect(fd)
-+    TSLog.d(TAG, "bindSocketToActiveNetwork: $why; VpnService.protect(fd=$fd) -> $ok")
-+    return ok
-+  }
-+
    override fun bindSocketToNetwork(fd: Int): Boolean {
-+    // Network.bindSocket(FileDescriptor) is API 23+.
++    // Network.bindSocket(FileDescriptor) is API 23+. VpnService.protect(fd) keeps the socket
++    // out of the tunnel instead; equivalent on a single uplink (gap in docs/STATUS.md).
 +    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-+      return protectSocketFallback(fd, "API ${Build.VERSION.SDK_INT} < 23")
++      val svc =
++          IPNService.runningInstance
++              ?: run {
++                TSLog.d(TAG, "bindSocketToActiveNetwork: no running IPNService; noop")
++                return false
++              }
++      val ok = svc.protect(fd)
++      TSLog.d(TAG, "bindSocketToActiveNetwork: VpnService.protect(fd=$fd) -> $ok")
++      return ok
 +    }
 +
      val net =
          NetworkChangeCallback.cachedDefaultNetwork
--            ?: run {
--              TSLog.d(TAG, "bindSocketToActiveNetwork: no cached default network; noop")
--              return false
--            }
-+            ?: return protectSocketFallback(fd, "no cached default network")
- 
-     val iface = NetworkChangeCallback.cachedDefaultInterfaceName
- 
+             ?: run {
 diff --git a/android/src/main/java/com/tailscale/ipn/IPNService.kt b/android/src/main/java/com/tailscale/ipn/IPNService.kt
 index adb7b1f..b1e816d 100644
 --- a/android/src/main/java/com/tailscale/ipn/IPNService.kt
