@@ -17,6 +17,8 @@ supported device. Every change to upstream behaviour must meet one of these rule
 
 Anything else is a parity gap, even when it is convenient for building or testing.
 
+The one accepted exception is shipping upstream's debug build instead of its release build: `run-as` is the only way to read Go logs and recover from crash loops without root, and tier 3 depends on its debug logging.
+
 - Do not add features, remove features, or change defaults.
 - Every patch header comment states which rule it meets and why it is needed.
 - When a substitute covers less than upstream's mechanism does, document what is missing in
