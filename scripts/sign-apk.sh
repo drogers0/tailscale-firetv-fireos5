@@ -64,16 +64,21 @@ trap cleanup EXIT
 # 1. TS_KEYSTORE_PASSWORD   (CI, from GitHub secrets)
 # 2. macOS Keychain         (local default)
 # 3. local password file    (legacy)
-# 4. interactive prompt
+# 4. interactive prompt     (skipped without a terminal, as in CI)
+# Called as PASS="$(resolve_pass)", so its die ends the script through set -e.
 resolve_pass() {
-  if [ -n "${TS_KEYSTORE_PASSWORD:-}" ]; then printf '%s' "$TS_KEYSTORE_PASSWORD"; return; fi
-  if command -v security >/dev/null 2>&1; then
-    if p=$(security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null); then
-      printf '%s' "$p"; return
-    fi
+  local p=""
+  if [ -n "${TS_KEYSTORE_PASSWORD:-}" ]; then
+    p="$TS_KEYSTORE_PASSWORD"
+  elif command -v security >/dev/null 2>&1 \
+    && p="$(security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null)"; then
+    :
+  elif [ -n "$PASSFILE" ] && [ -f "$PASSFILE" ]; then
+    p="$(cat "$PASSFILE")"
+  else
+    { read -rsp "Keystore passphrase: " p </dev/tty && echo >/dev/tty; } 2>/dev/null || p=""
   fi
-  if [ -n "$PASSFILE" ] && [ -f "$PASSFILE" ]; then cat "$PASSFILE"; return; fi
-  read -rsp "Keystore passphrase: " p </dev/tty; echo >/dev/tty
+  [ -n "$p" ] || die "no keystore passphrase: set TS_KEYSTORE_PASSWORD (in CI, the repo secret), or store it in the Keychain or $PASSFILE"
   printf '%s' "$p"
 }
 
@@ -106,7 +111,7 @@ if [ -z "$APK" ]; then
 fi
 [ -n "$APK" ] && [ -f "$APK" ] || die "no APK found; pass one explicitly"
 
-[ -f "$KEYSTORE" ] || die "keystore not found: $KEYSTORE (see header for how to create one)"
+[ -f "$KEYSTORE" ] || die "keystore not found: $KEYSTORE (in CI, set the TS_KEYSTORE_BASE64 repo secret; see the header for how to create one)"
 
 APKSIGNER="$(ls "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"/build-tools/*/apksigner 2>/dev/null | tail -1 || true)"
 [ -n "$APKSIGNER" ] || die "apksigner not found in the Android SDK build-tools"
