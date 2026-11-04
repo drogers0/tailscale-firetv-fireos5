@@ -20,8 +20,9 @@ flowchart LR
 ## The bump PR
 
 Every Monday, `.github/workflows/upstream-drift.yml` checks upstream's latest stable release.
-If `PINNED_REF` in `scripts/build.sh` names a different release, the workflow runs tiers 0-2
-against the new one, using `main`'s patches and pins.
+If it is newer than `PINNED_REF` in `scripts/build.sh` (a different tag of the same version
+counts too), the workflow runs tiers 0-2 against it, using `main`'s patches and pins. An older
+"latest" (a pulled upstream release, or a `main` bumped by hand past it) proposes nothing.
 
 **Pass:** the bot opens a draft PR from `bot/upstream-bump`, titled
 "Update to Tailscale <version>". The PR changes only `PINNED_REF`.
@@ -43,8 +44,8 @@ How the bot manages the PR:
   the PR, so don't push your own commits there.
 - If you close a bump PR unmerged, the bot does not propose that version again. To bring it
   back, reopen the PR while it is still the newest bump, or bump by hand (see the next section).
-- Once `main` pins the latest release, through the bot or by hand, the bot closes any open bump
-  PR.
+- Once `main` pins the latest release or a newer one, through the bot or by hand, the bot closes
+  any open bump PR.
 - **A red `bump` job** in a Monday run means the bot could not push, open the PR or start its
   checks. The drift issue was already closed by then, so this is the only signal. Read the
   job's log:
@@ -56,11 +57,11 @@ How the bot manages the PR:
        branch and opens a new PR.
   - **Any other error:** just re-run the failed job, `gh run rerun <run-id> --failed`. Do not
     delete the branch: the PR may already carry the new version.
-- **The `ts_ref` input** of a manual run is a test hook. It proposes the given release as the
-  bump, even an older one.
+- **The `ts_ref` input** of a manual run is a test hook. It bypasses the downgrade guard and
+  proposes the given release as the bump, even an older one.
 
 **Fail:** the `upstream-drift` issue opens, or gets a comment when a newer release fails. It
-closes once a later release passes, or once `main` pins the release.
+closes once a later release passes, or once `main` pins the release or a newer one.
 
 ## When the bot cannot bump
 
@@ -73,6 +74,10 @@ The failing run's log names the cause. Tier 0 stops at the first of these:
 - `stream JSON decode called in …` — extend 0005.
 
 In tier 1 or 2, fix the build, lint or emulator failure.
+
+If the issue says resolving the upstream release failed, no tier ran. The `resolve` job's log
+names the cause: an upstream tag in an unexpected format, no `PINNED_REF=` line in
+`scripts/build.sh`, or a failed GitHub API call (re-run it).
 
 To fix it:
 
@@ -130,9 +135,9 @@ It refuses:
   - If the failure was transient (a runner or network flake), re-run it:
     `gh run rerun <run-id> --failed`. That also re-runs `Sign and draft the release`.
   - Otherwise:
-  1. Fix the cause through a PR.
-  2. Delete the tag: `git push origin :refs/tags/<tag>; git tag -d <tag>`.
-  3. Tag again.
+    1. Fix the cause through a PR.
+    2. Delete the tag: `git push origin :refs/tags/<tag>; git tag -d <tag>`.
+    3. Tag again.
 - **`Sign and draft the release` failed:**
   1. If it left a draft, delete it: `gh release delete <tag> --yes`.
   2. Re-run the failed job within 7 days, while the built APK is kept:
