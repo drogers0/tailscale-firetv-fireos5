@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       ts_ref:
-        description: Test hook. Tests this upstream tag instead of the latest release, and proposes it as the bump even if it is older than PINNED_REF (it bypasses the downgrade guard)
+        description: Test hook. Tests this upstream tag instead of the latest release, and proposes it as the bump even if it is older than PINNED_REF (it bypasses the downgrade guard). Never updates the drift issue; see docs/RELEASING.md
         default: ''
 permissions:
   contents: read
@@ -43,8 +43,8 @@ jobs:
           # it identical to the copy in bump, which repeats this guard against the branch tip.
           older() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]; }
           current=false skip=false
-          # Nothing to bump when main pins this release or, unless the test hook names the ref,
-          # a newer one: upstream's latest can move backwards, or main was bumped by hand.
+          # Nothing to bump when the branch pins this release or, unless the test hook names the
+          # ref, a newer one: upstream's latest can move backwards, or main was bumped by hand.
           if [ "$ref" = "$pinned" ] || { [ -z "$INPUT_REF" ] && older "${ref%%-*}" "${pinned%%-*}"; }; then
             current=true
           else
@@ -136,8 +136,8 @@ jobs:
     steps:
       # The branch's tip now (main, on schedule), not the commit the run started from: a bump
       # merged during the tiers must not be proposed again. The pushed branch then carries
-      # main's workflow files unchanged, which is all GITHUB_TOKEN (no workflows permission)
-      # may push. Credentials are kept for the push; this job runs no upstream code.
+      # main's workflow files unchanged (a ts_ref run from another branch carries that branch's),
+      # which is all GITHUB_TOKEN (no workflows permission) may push. Credentials are kept for the push; this job runs no upstream code.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: '${{ github.ref }}' }
       - env:
@@ -162,7 +162,7 @@ jobs:
           tip="$(sed -n 's/^PINNED_REF=//p' scripts/build.sh)"
           if [ "$CURRENT" = true ] || [ "$tip" = "$TS_REF" ] \
             || { [ -z "$INPUT_REF" ] && older "$version" "${tip%%-*}"; }; then
-            [ -z "$open" ] || gh pr close "$open" --delete-branch --comment "main already pins \`$tip\`."
+            [ -z "$open" ] || gh pr close "$open" --delete-branch --comment "$GITHUB_REF_NAME already pins \`$tip\`."
             exit 0
           fi
           sed -i "s/^PINNED_REF=.*/PINNED_REF=$TS_REF/" scripts/build.sh
