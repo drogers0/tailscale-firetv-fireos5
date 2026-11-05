@@ -20,12 +20,17 @@ set -euo pipefail
 
 # ---- pinned inputs ----------------------------------------------------------
 TS_REPO="https://github.com/tailscale/tailscale-android.git"
-# The release the patch series in patches/ is for.
-TS_REF="${TS_REF:-1.104.5-t788384763-gd8673104f}"
+# Keep each pin below a bare NAME=value (no quotes or trailing comment): CI, the bump bot,
+# the release workflow and the docs read these lines with sed.
+#
+# The upstream release the patch series in patches/ is for. upstream-drift.yml's bump PRs
+# rewrite this line, and release.yml checks a release tag against it. TS_REF overrides it
+# for one build.
+PINNED_REF=1.104.5-t788384763-gd8673104f
+TS_REF="${TS_REF:-$PINNED_REF}"
 # Toolchain. Each pin except CMDLINE_TOOLS must equal what TS_REF declares; the build
 # checks that right after the checkout. CI keys its SDK cache on the four SDK package
-# NAME= lines (.github/actions/setup-build). Keep each pin a bare NAME=value (no quotes or
-# trailing comment): CI and the docs read these lines with sed.
+# NAME= lines (.github/actions/setup-build).
 JDK=21
 NDK_VERSION=23.1.7779620
 CMDLINE_TOOLS=9477386

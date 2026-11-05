@@ -95,7 +95,7 @@ Tunables stay environment variables read by `scripts/build.sh`; `make build TS_R
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TS_REF` | pinned in `scripts/build.sh` | upstream release tag that `patches/` is for |
+| `TS_REF` | `PINNED_REF` in `scripts/build.sh` | upstream release tag that `patches/` is for |
 | `MIN_SDK` | `22` | API floor; patched into Gradle **and** gomobile |
 | `GOMOBILE_TARGET` | `android/arm` | `android/arm64` for arm64-only; bare `android` for all ABIs (slower, larger) |
 | `ANDROID_SDK_ROOT` | `~/Library/Android/sdk` (mac), `~/Android/Sdk` (linux) | SDK location |
@@ -108,10 +108,11 @@ Tunables stay environment variables read by `scripts/build.sh`; `make build TS_R
 
 ### `TS_REF` and the patch series
 
-`patches/*.patch` is one series for the default `TS_REF`. Another ref needs the series rebased
+`patches/*.patch` is one series for `PINNED_REF`. Another ref needs the series rebased
 in the same change. `scripts/build.sh` supports upstream's current build layout only. A ref
 whose toolchain differs from the pins stops at once and prints the pin lines to change. A
-patch that does not apply stops the build, naming the hunk.
+patch that does not apply stops the build, naming the hunk. A weekly workflow proposes bumps
+to `PINNED_REF` as PRs; see [RELEASING.md](RELEASING.md).
 
 ## What it does
 
@@ -149,10 +150,16 @@ dist/tailscale-fireos5-<ver>-minsdk22-armeabi-v7a.apk.sha256
 
 Uses `TS_KEYSTORE_BASE64` / `TS_KEYSTORE_PASSWORD` / `TS_KEY_ALIAS` when set (CI), else
 `~/.keystores/tailscale-firetv-release.{jks,pass}`. See STATUS.md — note that GitHub
-secrets cannot be read back, so the local keystore must be preserved.
+secrets cannot be read back, so the local keystore must be preserved. Releases are signed by
+CI ([RELEASING.md](RELEASING.md)).
 
-A later `make build` of the same version refuses to overwrite the signed APK. Move it (for
-example to a release folder), or build with `DIST=<dir>`.
+It signs a copy, and replaces the APK only if the copy's certificate is `CERT_SHA256`; any
+other key leaves the APK and its `.sha256` unchanged. Signing with your own key? Set
+`CERT_SHA256` in `scripts/sign-apk.sh` to your certificate's SHA-256
+(`apksigner verify --print-certs`).
+
+A later `make build` of the same version refuses to overwrite the signed APK. Move it out of
+`dist/` first, or build with `DIST=<dir>`.
 
 ## Install and test
 
@@ -223,7 +230,8 @@ Not pinned: Gradle's transitive dependency resolution, and the debug signing key
 generates a random `~/.android/debug.keystore` per machine. **Two builds on different
 machines will not be byte-identical**, and installing a rebuild over an existing install
 fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` unless you uninstall first or reuse the
-keystore. Compare `verify-apk.py` output rather than file hashes.
+keystore. Compare `verify-apk.py` output rather than file hashes. For a published release, see
+[RELEASING.md](RELEASING.md#reproducibility).
 
 ## Why not just download an APK?
 

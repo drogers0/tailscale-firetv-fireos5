@@ -28,6 +28,10 @@
 #   TS_KEYSTORE_ENCRYPTED
 #                     optional path to a gpg-encrypted keystore (kept out of tree)
 #
+# CERT_SHA256 below pins the release certificate: a keystore with any other key (a wrong
+# secret, a test key) fails here instead of shipping an APK that cannot upgrade in place.
+# Someone signing with their own key changes that line.
+#
 # Create a keystore once with:
 #   keytool -genkeypair -v -keystore "$TS_KEYSTORE" -alias firetv \
 #           -keyalg RSA -keysize 4096 -validity 10950
@@ -37,6 +41,9 @@ set -euo pipefail
 KEYSTORE="${TS_KEYSTORE:-$HOME/.keystores/tailscale-firetv-release.jks}"
 PASSFILE="${TS_KEYSTORE_PASS_FILE:-$HOME/.keystores/tailscale-firetv-release.pass}"
 ALIAS="${TS_KEY_ALIAS:-firetv}"
+# The release certificate's SHA-256 (apksigner verify --print-certs). Bare NAME=value:
+# scripts/release-notes.sh reads it with sed.
+CERT_SHA256=b6e56d68dcbeb34236f90951e8e05f07e6a8dba90be17c0d82646a6a6da053b5
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -49,24 +56,29 @@ ENCRYPTED="${TS_KEYSTORE_ENCRYPTED:-}"
 KEYCHAIN_SERVICE="tailscale-firetv-release"
 KEYCHAIN_ACCOUNT="firetv"
 
-CLEANUP_KS=""
-cleanup() { [ -n "$CLEANUP_KS" ] && rm -f "$CLEANUP_KS"; }
+CLEANUP_KS="" SIGNED=""
+cleanup() { rm -f ${CLEANUP_KS:+"$CLEANUP_KS"} ${SIGNED:+"$SIGNED" "$SIGNED.idsig"}; }
 trap cleanup EXIT
 
 # ---- resolve the passphrase -------------------------------------------------
 # 1. TS_KEYSTORE_PASSWORD   (CI, from GitHub secrets)
 # 2. macOS Keychain         (local default)
 # 3. local password file    (legacy)
-# 4. interactive prompt
+# 4. interactive prompt     (skipped without a terminal, as in CI)
+# Called as PASS="$(resolve_pass)", so its die ends the script through set -e.
 resolve_pass() {
-  if [ -n "${TS_KEYSTORE_PASSWORD:-}" ]; then printf '%s' "$TS_KEYSTORE_PASSWORD"; return; fi
-  if command -v security >/dev/null 2>&1; then
-    if p=$(security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null); then
-      printf '%s' "$p"; return
-    fi
+  local p=""
+  if [ -n "${TS_KEYSTORE_PASSWORD:-}" ]; then
+    p="$TS_KEYSTORE_PASSWORD"
+  elif command -v security >/dev/null 2>&1 \
+    && p="$(security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null)"; then
+    :
+  elif [ -n "$PASSFILE" ] && [ -f "$PASSFILE" ]; then
+    p="$(cat "$PASSFILE")"
+  else
+    { read -rsp "Keystore passphrase: " p </dev/tty 2>/dev/tty && echo >/dev/tty; } 2>/dev/null || p=""
   fi
-  if [ -n "$PASSFILE" ] && [ -f "$PASSFILE" ]; then cat "$PASSFILE"; return; fi
-  read -rsp "Keystore passphrase: " p </dev/tty; echo >/dev/tty
+  [ -n "$p" ] || die "no keystore passphrase: set TS_KEYSTORE_PASSWORD (in CI, the repo secret), or store it in the Keychain or $PASSFILE"
   printf '%s' "$p"
 }
 
@@ -75,14 +87,14 @@ resolve_pass() {
 # 2. TS_KEYSTORE_ENCRYPTED   (optional out-of-tree gpg-encrypted keystore)
 # 3. plain on-disk keystore  (default: ~/.keystores/tailscale-firetv-release.jks)
 if [ -n "${TS_KEYSTORE_BASE64:-}" ]; then
-  CLEANUP_KS="$(mktemp -t tsks)"; chmod 600 "$CLEANUP_KS"
+  CLEANUP_KS="$(mktemp "${TMPDIR:-/tmp}/tsks.XXXXXX")"; chmod 600 "$CLEANUP_KS"
   printf '%s' "$TS_KEYSTORE_BASE64" | base64 --decode > "$CLEANUP_KS"
   KEYSTORE="$CLEANUP_KS"
   info "keystore: TS_KEYSTORE_BASE64 (CI secret)"
 elif [ -n "$ENCRYPTED" ] && [ -f "$ENCRYPTED" ]; then
   command -v gpg >/dev/null 2>&1 || die "gpg needed to decrypt $ENCRYPTED"
   PASS="$(resolve_pass)"
-  CLEANUP_KS="$(mktemp -t tsks)"; chmod 600 "$CLEANUP_KS"
+  CLEANUP_KS="$(mktemp "${TMPDIR:-/tmp}/tsks.XXXXXX")"; chmod 600 "$CLEANUP_KS"
   printf '%s' "$PASS" | gpg --batch --quiet --passphrase-fd 0 \
       --decrypt "$ENCRYPTED" > "$CLEANUP_KS" 2>/dev/null \
     || die "could not decrypt $ENCRYPTED (wrong passphrase?)"
@@ -99,23 +111,41 @@ if [ -z "$APK" ]; then
 fi
 [ -n "$APK" ] && [ -f "$APK" ] || die "no APK found; pass one explicitly"
 
-[ -f "$KEYSTORE" ] || die "keystore not found: $KEYSTORE (see header for how to create one)"
+[ -f "$KEYSTORE" ] || die "keystore not found: $KEYSTORE (in CI, set the TS_KEYSTORE_BASE64 repo secret; see the header for how to create one)"
 
-APKSIGNER="$(ls "${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}"/build-tools/*/apksigner 2>/dev/null | tail -1 || true)"
+APKSIGNER="$(ls "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"/build-tools/*/apksigner 2>/dev/null | tail -1 || true)"
 [ -n "$APKSIGNER" ] || die "apksigner not found in the Android SDK build-tools"
 
 [ -n "${PASS:-}" ] || PASS="$(resolve_pass)"
 
-info "Signing $(basename "$APK")"
-"$APKSIGNER" sign \
+# Sign a copy beside the APK and replace the APK only once the copy carries the release
+# certificate, so a wrong key leaves the APK and its .sha256 untouched.
+SIGNED="$(mktemp "$(dirname "$APK")/.$(basename "$APK").XXXXXX")"
+info "Signing $(basename "$APK") with $APKSIGNER"
+# env:, not pass:, so the passphrase never appears on a command line (ps, /proc).
+TS_SIGN_PASS="$PASS" "$APKSIGNER" sign \
   --ks "$KEYSTORE" \
   --ks-key-alias "$ALIAS" \
-  --ks-pass "pass:$PASS" \
-  --key-pass "pass:$PASS" \
+  --ks-pass env:TS_SIGN_PASS \
+  --key-pass env:TS_SIGN_PASS \
+  --out "$SIGNED" \
   "$APK"
 
 info "Verifying"
-"$APKSIGNER" verify --print-certs "$APK" | grep -E "Signer #1 certificate (DN|SHA-256)" || true
+certs="$("$APKSIGNER" verify --print-certs "$SIGNED")" || die "apksigner verify failed on the signed copy of $APK"
+# Every signer line must name the release key. build-tools 36 prints "Signer #1 certificate
+# SHA-256 digest: ..."; 37 prints "V3.0 Signer: certificate SHA-256 digest: ...".
+got="$(printf '%s\n' "$certs" | sed -n 's/^.*[Ss]igner.* certificate SHA-256 digest: //p' | sort -u)"
+[ "$got" = "$CERT_SHA256" ] \
+  || { printf '%s\n' "$certs" | grep -v '^WARNING' | head -20 >&2 || true
+         die "signing $APK produced certificate $(printf '%s' "${got:-<none>}" | tr '\n' ' '), not the release key $CERT_SHA256 (wrong keystore or alias?); $APK is unchanged"; }
+printf '%s\n' "$certs" | grep -E 'certificate (DN|SHA-256)'
+
+chmod 644 "$SIGNED"
+rm -f "$APK.idsig"
+[ ! -f "$SIGNED.idsig" ] || mv "$SIGNED.idsig" "$APK.idsig"
+mv "$SIGNED" "$APK"
+SIGNED=""
 
 # refresh the checksum so it matches the signed bytes
 ( cd "$(dirname "$APK")" && shasum -a 256 "$(basename "$APK")" > "$(basename "$APK").sha256" )
@@ -123,8 +153,8 @@ info "sha256: $(cut -d' ' -f1 < "$APK.sha256")"
 
 cat <<EOF
 
-Signed with the durable release key. Anyone upgrading from a differently-signed build
-(including earlier debug-signed releases) must uninstall first:
+Signed with the durable release key. A device running a build signed with any other key
+(your own debug build, an official Tailscale install) must uninstall it first:
 
   adb uninstall com.tailscale.ipn
   adb install $(basename "$APK")
