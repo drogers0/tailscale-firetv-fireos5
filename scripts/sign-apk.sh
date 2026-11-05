@@ -121,7 +121,7 @@ APKSIGNER="$(ls "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}
 # Sign a copy beside the APK and replace the APK only once the copy carries the release
 # certificate, so a wrong key leaves the APK and its .sha256 untouched.
 SIGNED="$(mktemp "$(dirname "$APK")/.$(basename "$APK").XXXXXX")"
-info "Signing $(basename "$APK")"
+info "Signing $(basename "$APK") with $APKSIGNER"
 # env:, not pass:, so the passphrase never appears on a command line (ps, /proc).
 TS_SIGN_PASS="$PASS" "$APKSIGNER" sign \
   --ks "$KEYSTORE" \
@@ -135,7 +135,7 @@ info "Verifying"
 certs="$("$APKSIGNER" verify --print-certs "$SIGNED")" || die "apksigner verify failed on the signed copy of $APK"
 got="$(printf '%s\n' "$certs" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
 [ "$got" = "$CERT_SHA256" ] \
-  || die "signing $APK produced certificate ${got:-<none>}, not the release key $CERT_SHA256 (wrong keystore or alias?); $APK is unchanged"
+  || { printf '%s\n' "$certs" | grep -v '^WARNING' | head -20 >&2; die "signing $APK produced certificate ${got:-<none>}, not the release key $CERT_SHA256 (wrong keystore or alias?); $APK is unchanged"; }
 printf '%s\n' "$certs" | grep -E '^Signer #1 certificate (DN|SHA-256)'
 
 chmod 644 "$SIGNED"
