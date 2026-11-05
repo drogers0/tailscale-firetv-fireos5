@@ -26,7 +26,7 @@ TS_REPO="https://github.com/tailscale/tailscale-android.git"
 # The upstream release the patch series in patches/ is for. upstream-drift.yml's bump PRs
 # rewrite this line, and release.yml checks a release tag against it. TS_REF overrides it
 # for one build.
-PINNED_REF=1.104.5-t788384763-gd8673104f
+PINNED_REF=1.104.4-t938213198-gb9d487fe6
 TS_REF="${TS_REF:-$PINNED_REF}"
 # Toolchain. Each pin except CMDLINE_TOOLS must equal what TS_REF declares; the build
 # checks that right after the checkout. CI keys its SDK cache on the four SDK package
