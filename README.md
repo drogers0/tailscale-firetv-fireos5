@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <em>Tailscale 1.98 on a 2016 Fire TV Stick, and on any Android 5.1 to 7.1 device the official app no longer supports.</em>
+  <em>Recent Tailscale releases on a 2016 Fire TV Stick, and on any Android 5.1 to 7.1 device the official app no longer supports.</em>
 </p>
 
 <p align="center">
@@ -16,7 +16,7 @@
 
 ---
 
-An unofficial, reproducible build of the **Tailscale Android client** for **Fire OS 5 / Android 5.1 (API 22)** and up, on devices with **OpenGL ES 2.0** GPUs. It takes a finished upstream release (**Tailscale 1.98.8**), restores the API 22 floor, and patches the handful of calls that need it. **Exit-node routing** works, verified on a Fire TV Stick 2nd gen.
+An unofficial, reproducible build of the **Tailscale Android client** for **Fire OS 5 / Android 5.1 (API 22)** and up, on devices with **OpenGL ES 2.0** GPUs. It tracks Tailscale's current stable release, restores the API 22 floor, and patches the calls that need it; releases can lag `main`, and each [release](https://github.com/drogers0/tailscale-firetv-fireos5/releases) names the upstream version it carries. **Exit-node routing** works, verified on a Fire TV Stick 2nd gen.
 
 ```console
 $ adb connect 192.168.1.50:5555
@@ -35,7 +35,7 @@ Success
 The build runs on **API 22 to 25** (Android 5.1 to 7.1) with an **armeabi-v7a** ABI. The official client starts at API 26, so every Fire OS 5 and Fire OS 6 device is out of its reach.
 
 - **Needs this build:** Fire TV Stick 1st gen (`AFTM`) and 2nd gen (`AFTT`), Fire TV 3rd gen (`AFTN`), Fire TV Cube 1st gen (`AFTA`), Fire 7 (2017) and Fire (2015) tablets. All have GLES 2.0 GPUs, which no older Tailscale release can render on.
-- **Benefits from it:** GLES 3 devices at API 22 to 25, such as Fire TV 1st and 2nd gen and the Fire OS 5 Fire HD and HDX tablets. Tailscale 1.62.0 runs there; this build adds two years of fixes.
+- **Benefits from it:** GLES 3 devices at API 22 to 25, such as Fire TV 1st and 2nd gen and the Fire OS 5 Fire HD and HDX tablets. Tailscale 1.62.0 runs there; this build adds every fix since.
 - **Use the official client:** Fire OS 7 and later (API 28+).
 
 Only `AFTT` has been tested. [docs/DEVICES.md](docs/DEVICES.md) has the full per-model table, including non-Amazon hardware.
@@ -55,6 +55,8 @@ You need `adb` from Android [platform-tools](https://developer.android.com/tools
 
    With the repo cloned, `./scripts/device-check.sh 192.168.1.50:5555` checks API level, ABI and GLES version in one go.
 3. **Download, verify and install** the `.apk` and its `.apk.sha256` from the [latest release](https://github.com/drogers0/tailscale-firetv-fireos5/releases/latest), as in the example above, or from the release page in a browser. On Linux without `shasum`, use `sha256sum -c`. On Windows (PowerShell), compare `certutil -hashfile <apk> SHA256` with the `.sha256` file instead of `shasum`, and pass the full filename to `adb install`.
+
+   New releases are built and signed by CI from a tagged commit on `main`, and checked on a Fire TV Stick before they are published ([docs/RELEASING.md](docs/RELEASING.md)).
 
 Then open Tailscale from the Fire TV's app list and log in.
 
@@ -87,7 +89,7 @@ The GLES 3 requirement came from the Gio UI toolkit, which Compose replaced. The
 
 ## Status
 
-Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5:
+Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5, running 1.98.8 (the table below). Whatever version `main` pins passes the API 22 emulator tests in CI; 1.104.5 also passed the emulator logged in to a real tailnet ([docs/TESTING.md](docs/TESTING.md)).
 
 | | |
 |---|---|
@@ -96,7 +98,7 @@ Verified on a Fire TV Stick 2nd gen (`AFTT`), Fire OS 5.2.9.5:
 | Online to control plane, health clear | ✅ |
 | Peer list | ✅ |
 | **Exit-node routing** | ✅ 1 MB download, **1,113,884 bytes over `tun0`** |
-| Reconnect after reboot (API 22 to 23) | ⚠️ see [Limitations](#limitations) and [reboot behavior](docs/STATUS.md#reboot-behaviour) |
+| Reconnect after reboot (API 22 to 23) | ⚠️ not in 1.98.8; see [Limitations](#limitations) and [reboot behavior](docs/STATUS.md#reboot-behaviour) |
 
 The patch series and what each patch fixes are in [docs/STATUS.md](docs/STATUS.md#patches).
 
@@ -104,20 +106,22 @@ The patch series and what each patch fixes are in [docs/STATUS.md](docs/STATUS.m
 
 | | |
 |---|---|
-| [docs/STATUS.md](docs/STATUS.md) | what works, patches, signing, reading Go-side logs, gotchas |
+| [docs/STATUS.md](docs/STATUS.md) | what works and how it was verified, patches, signing, reading Go-side logs, gotchas |
 | [docs/BUILD.md](docs/BUILD.md) | prerequisites, build options, troubleshooting, reproducibility |
 | [docs/TESTING.md](docs/TESTING.md) | test tiers, running them locally and in CI, the release checklist |
+| [docs/RELEASING.md](docs/RELEASING.md) | how upstream releases become bump PRs and signed draft releases |
 | [docs/DEVICES.md](docs/DEVICES.md) | every Fire TV and Fire tablet model, plus non-Amazon devices |
-| [docs/BACKGROUND.md](docs/BACKGROUND.md) | why the gap exists, why 1.98.8 |
+| [docs/BACKGROUND.md](docs/BACKGROUND.md) | why the gap exists, why track current stable |
 | [docs/FINDINGS.md](docs/FINDINGS.md) | investigation record, including disproven theories |
 
 ## Limitations
 
-- **The current release predates patches 0008 to 0010**, available on `main` via a source build:
-  - On API 22 to 23 (Fire OS 5) the VPN does not reconnect after a reboot, because upstream relies on always-on VPN (API 24+). Open the app once after a reboot; login and exit-node choice persist. Patch 0008 adds a boot receiver; it is not yet verified on hardware.
-  - With another VPN app active, the release crashes on API 22 instead of showing the VPN-conflict dialog. Turn the other VPN off (patch 0009).
-  - Below API 26 the release misses the initial network state, so DNS falls back to a public resolver until the network changes (patch 0010).
-- **Single ABI.** Published APKs are `armeabi-v7a`. arm64 devices accept them; a device without v7a needs `GOMOBILE_TARGET=android/arm64 ./scripts/build.sh`.
+- **`1.98.8-fireos5-r1` lacks patches 0008 to 0011.** Releases after it, and a source build of `main`, have them; 0012 fixes code 1.98.8 does not contain. On r1:
+  - On API 22 to 23 (Fire OS 5) the VPN does not reconnect after a reboot, because upstream relies on always-on VPN (API 24+). Open the app once after a reboot; login and exit-node choice persist. Patch 0008 adds a boot receiver, verified on the API 22 emulator but not yet on a Fire TV.
+  - With another VPN app active, the app crashes on API 22 instead of showing the VPN-conflict dialog. Turn the other VPN off (patch 0009).
+  - Below API 26 the app misses the initial network state, so DNS falls back to a public resolver until the network changes (patch 0010).
+  - A background connect request that cannot start the VPN crashes the app instead of posting a "connection failed" notification (patch 0011).
+- **Single ABI.** Published APKs are `armeabi-v7a`. arm64 devices accept them; a device without v7a needs `GOMOBILE_TARGET=android/arm64 make build`.
 - **Debuggable.** Releases are re-signed debug builds, which keeps `run-as` log reading possible but lets anyone with ADB access read app-private data.
 - **No side-by-side install.** The APK keeps the upstream application ID `com.tailscale.ipn`, and releases are signed with this project's key, not Tailscale's. It cannot coexist with an official Tailscale install, and switching between them needs an uninstall.
 - **Slow first launch.** 5 to 7 seconds to first frame on a Fire TV Stick 2nd gen.
