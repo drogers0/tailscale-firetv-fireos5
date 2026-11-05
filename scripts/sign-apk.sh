@@ -133,10 +133,12 @@ TS_SIGN_PASS="$PASS" "$APKSIGNER" sign \
 
 info "Verifying"
 certs="$("$APKSIGNER" verify --print-certs "$SIGNED")" || die "apksigner verify failed on the signed copy of $APK"
-got="$(printf '%s\n' "$certs" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+# Every signer line must name the release key. build-tools 36 prints "Signer #1 certificate
+# SHA-256 digest: ..."; 37 prints "V3.0 Signer: certificate SHA-256 digest: ...".
+got="$(printf '%s\n' "$certs" | sed -n 's/^.*[Ss]igner.* certificate SHA-256 digest: //p' | sort -u)"
 [ "$got" = "$CERT_SHA256" ] \
   || { printf '%s\n' "$certs" | grep -v '^WARNING' | head -20 >&2; die "signing $APK produced certificate ${got:-<none>}, not the release key $CERT_SHA256 (wrong keystore or alias?); $APK is unchanged"; }
-printf '%s\n' "$certs" | grep -E '^Signer #1 certificate (DN|SHA-256)'
+printf '%s\n' "$certs" | grep -E 'certificate (DN|SHA-256)'
 
 chmod 644 "$SIGNED"
 rm -f "$APK.idsig"
