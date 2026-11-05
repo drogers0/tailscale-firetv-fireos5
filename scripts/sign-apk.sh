@@ -137,7 +137,8 @@ certs="$("$APKSIGNER" verify --print-certs "$SIGNED")" || die "apksigner verify 
 # SHA-256 digest: ..."; 37 prints "V3.0 Signer: certificate SHA-256 digest: ...".
 got="$(printf '%s\n' "$certs" | sed -n 's/^.*[Ss]igner.* certificate SHA-256 digest: //p' | sort -u)"
 [ "$got" = "$CERT_SHA256" ] \
-  || { printf '%s\n' "$certs" | grep -v '^WARNING' | head -20 >&2; die "signing $APK produced certificate ${got:-<none>}, not the release key $CERT_SHA256 (wrong keystore or alias?); $APK is unchanged"; }
+  || { printf '%s\n' "$certs" | grep -v '^WARNING' | head -20 >&2 || true
+         die "signing $APK produced certificate $(printf '%s' "${got:-<none>}" | tr '\n' ' '), not the release key $CERT_SHA256 (wrong keystore or alias?); $APK is unchanged"; }
 printf '%s\n' "$certs" | grep -E 'certificate (DN|SHA-256)'
 
 chmod 644 "$SIGNED"

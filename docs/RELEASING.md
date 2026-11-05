@@ -12,7 +12,7 @@ flowchart LR
   U[upstream stable release] --> D["upstream-drift.yml (Mondays): tiers 0-2"]
   D -- pass --> P[draft bump PR]
   D -- fail --> I[upstream-drift issue]
-  P -- you merge --> M[main]
+  P -- you approve its checks and merge --> M[main]
   M -- you push a tag --> R["release.yml: build, sign, draft release"]
   R -- device check, you publish --> G[release]
 ```
@@ -37,7 +37,7 @@ counts too), the workflow runs tiers 0-2 against it, using `main`'s patches and 
 How the bot manages the PR:
 
 - There is one bump PR at a time. A newer passing release force-pushes the branch and retitles
-  the PR, so don't push your own commits there.
+  the PR, so don't push your own commits there. Its checks are held again: repeat step 1.
 - If you close a bump PR unmerged, the bot does not propose that version again. To bring it
   back, reopen the PR while it is still the newest bump, or bump by hand (see the next section).
 - Once `main` pins the latest release or a newer one, through the bot or by hand, the bot closes
