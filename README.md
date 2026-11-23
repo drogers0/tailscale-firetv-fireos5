@@ -54,7 +54,7 @@ You need `adb` ([platform-tools](https://developer.android.com/tools/releases/pl
    On Windows, compare `certutil -hashfile <apk> SHA256` with the `.sha256` file, and give `adb install` the full filename.
 4. Open Tailscale from the app list and log in.
 
-To upgrade, install the new APK the same way; login and settings carry over. Releases after `1.98.8-fireos5-r1` add reconnect after reboot (see [Limitations](#limitations)), fix two crashes, and stop DNS falling back to a public resolver.
+To upgrade, install the new APK the same way; login and settings carry over. Releases after `1.98.8-fireos5-r1` add reconnect after reboot, fix two crashes, and stop DNS falling back to a public resolver.
 
 Optional: from a clone of this repo, `./scripts/device-check.sh 192.168.1.50:5555` reports the device's API level, ABI and GLES version.
 
@@ -82,18 +82,6 @@ A local build is signed with your debug key, so it cannot install over a release
 | Tailscale ≥ 1.64.0 (Compose UI) | **No** (minSdk 26) | Yes |
 
 Upstream raised the floor to API 26 with a one-line `minSdkVersion` change, with no new dependency behind it. Details: [docs/BACKGROUND.md](docs/BACKGROUND.md).
-
-## Status
-
-Last full hardware test: Fire TV Stick 2nd gen (Fire OS 5.2.9.5) on 1.98.8, where install, GLES 2.0 rendering, login, DERP relay, peer list and exit-node routing all work. Release 1.104.5 passed the API 22 emulator tests in CI and a logged-in emulator test against a real tailnet ([docs/TESTING.md](docs/TESTING.md)). Each release names the upstream version it carries; `main` can be ahead. Details and patches: [docs/STATUS.md](docs/STATUS.md).
-
-## Limitations
-
-- **Reconnect after reboot needs one launch first.** On API 22 to 23, a boot receiver stands in for always-on VPN (API 24+). It reconnects only if Tailscale was connected at shutdown and the app has been opened since install or force-stop. Fire OS signals boot about two minutes after power-on, so expect the tunnel back after roughly 2.5 minutes. Verified on the emulator, not yet on a Fire TV ([details](docs/STATUS.md#reboot-behaviour)). If it does not reconnect, opening the app does; login and exit-node choice persist.
-- **Single ABI.** APKs are `armeabi-v7a`, which arm64 devices also run. For arm64-only devices, build with `GOMOBILE_TARGET=android/arm64`.
-- **Debuggable.** Releases are debug builds re-signed with this project's key, so `run-as` can read logs, and anyone with ADB access can read app data.
-- **No side-by-side install.** This build uses the official app ID `com.tailscale.ipn` with a different signing key, so switching between it and the official app needs an uninstall.
-- **Slow first launch.** 5 to 7 seconds on a Fire TV Stick 2nd gen.
 
 ## Documentation
 
