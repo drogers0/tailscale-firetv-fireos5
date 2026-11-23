@@ -18,12 +18,10 @@
 
 An unofficial build of the current stable **Tailscale Android client** for **API 22 to 25** (Fire OS 5 and 6), including devices with **OpenGL ES 2.0** GPUs. It lowers upstream's API 26 floor and patches the calls that break below it.
 
-```console
-$ gh release download -R drogers0/tailscale-firetv-fireos5 -p '*.apk*'
-$ shasum -a 256 -c tailscale-fireos5-*.apk.sha256
-tailscale-fireos5-1.104.5-minsdk22-armeabi-v7a.apk: OK
-$ adb install -r tailscale-fireos5-*.apk
-Success
+```sh
+gh release download -R drogers0/tailscale-firetv-fireos5 -p '*.apk*'
+shasum -a 256 -c tailscale-fireos5-*.apk.sha256  # tailscale-fireos5-1.104.5-minsdk22-armeabi-v7a.apk: OK
+adb install -r tailscale-fireos5-*.apk           # Success
 ```
 
 > [!IMPORTANT]
@@ -44,15 +42,21 @@ Only the Fire TV Stick 2nd gen (`AFTT`) has been tested. [docs/DEVICES.md](docs/
 You need `adb` ([platform-tools](https://developer.android.com/tools/releases/platform-tools)). The [`gh` CLI](https://cli.github.com) is optional and needs `gh auth login` once.
 
 1. On the Fire TV, turn on Settings > My Fire TV (Device on older firmware) > Developer options > ADB debugging. The IP address is under Settings > My Fire TV > About > Network.
-2. Run `adb connect <ip>:5555` and accept the prompt on the TV. `adb shell getprop ro.product.model` gives the model code for the table above, and `adb shell getprop ro.build.version.sdk` should print 22 to 25.
-3. Download the `.apk` and `.apk.sha256` from the [latest release](https://github.com/drogers0/tailscale-firetv-fireos5/releases/latest), or with `gh release download` as shown at the top.
-4. Verify with `shasum -a 256 -c *.apk.sha256` (`sha256sum -c` on Linux), then run `adb install -r tailscale-fireos5-*.apk`.
+2. Connect, using your Fire TV's IP, and accept the prompt on the TV:
+
+   ```sh
+   adb connect 192.168.1.50:5555
+   adb shell getprop ro.product.model      # model code for the table above, e.g. AFTT
+   adb shell getprop ro.build.version.sdk  # 22 to 25
+   ```
+
+3. Download the `.apk` and `.apk.sha256` from the [latest release](https://github.com/drogers0/tailscale-firetv-fireos5/releases/latest), then verify and install them with the last two commands at the top (`sha256sum -c` instead of `shasum -a 256 -c` on Linux). Or run the whole block at the top, which downloads with `gh`.
    On Windows, compare `certutil -hashfile <apk> SHA256` with the `.sha256` file, and give `adb install` the full filename.
-5. Open Tailscale from the app list and log in.
+4. Open Tailscale from the app list and log in.
 
 To upgrade, install the new APK the same way; login and settings carry over. Releases after `1.98.8-fireos5-r1` add reconnect after reboot (see [Limitations](#limitations)), fix two crashes, and stop DNS falling back to a public resolver.
 
-Optional: from a clone of this repo, `./scripts/device-check.sh <ip>:5555` reports the device's API level, ABI and GLES version.
+Optional: from a clone of this repo, `./scripts/device-check.sh 192.168.1.50:5555` reports the device's API level, ABI and GLES version.
 
 New releases are built and signed by CI from a tag on `main` as drafts, then published by hand ([docs/RELEASING.md](docs/RELEASING.md)).
 
@@ -106,7 +110,11 @@ Reports from devices other than `AFTT` help most. Include `./scripts/device-chec
 
 Before opening a PR, run `make check`. See [docs/TESTING.md](docs/TESTING.md).
 
-If this helped, a ⭐ helps others find it: `gh api --method PUT user/starred/drogers0/tailscale-firetv-fireos5`
+If this helped, a ⭐ helps others find it:
+
+```sh
+gh api --method PUT user/starred/drogers0/tailscale-firetv-fireos5
+```
 
 ## Legal
 
