@@ -94,7 +94,9 @@ Upstream raised the floor to API 26 with a one-line `minSdkVersion` change, with
 
 ## Contributing
 
-Reports from devices other than `AFTT` help most. Include `./scripts/device-check.sh` output, the release tag (or `TS_REF` if you built it), and `adb logcat` around the failure ([reading Go-side logs](docs/STATUS.md#reading-the-go-side-logs)). Redact tailnet hostnames, IPs and auth URLs.
+Bug reports are welcome. Please include your hardware (`./scripts/device-check.sh` output, or the model code), the release tag you installed (or `TS_REF` if you built it), and `adb logcat` from around the failure ([reading Go-side logs](docs/STATUS.md#reading-the-go-side-logs)). Redact tailnet hostnames, IPs and auth URLs.
+
+Reports that it works are welcome too. Open an issue naming your device and model code, and it will be added to the [device table](docs/DEVICES.md).
 
 Before opening a PR, run `make check`. See [docs/TESTING.md](docs/TESTING.md).
 
